@@ -1134,6 +1134,42 @@ func TestDeprecatedConfig(t *testing.T) {
 	}
 }
 
+func TestSEMConfig(t *testing.T) {
+
+	storeDir := t.TempDir()
+	configFile := filepath.Join(storeDir, "sem.json")
+
+	f, err := os.Create(configFile)
+	require.NoError(t, err)
+	defer func(configFile string) {
+		require.NoError(t, os.Remove(configFile))
+	}(configFile)
+
+	_, err = f.WriteString("{\n    \"ver\": \"1\", \n    \"tidb_min_ver\": \"8.0\",\n  " +
+		"  \"restricted_databases\" : [ \"metrics_schema\", \"information_schema\"],\n    \n   " +
+		" \"restricted_tables\" : [\n        {\n            \"schema\": \"metrics_schema\",\n            \"name\": \"<name>\"\n        }\n    ],\n\n  " +
+		"  \"restricted_columns\" : [\n         {\n            \"name\": \"<column_name>\",\n            \"restriction_type\": \"replace\",\n            \"value\": \"<value>\" \n        }\n    ],\n    \n    \n  " +
+		"  \"restricted_variables\" : [\n        {\n            \"name\": \"<variable>\",\n            \"scope\": \"global\",\n            \"restriction_type\": \"replace\",\n            \"readonly\": true,\n            \"value\": \"<value>\"\n        }\n    ],\n    \n  " +
+		"   \"restricted_status\" : [\n        {\n            \"name\": \"status\",\n            \"restriction_type\": \"hidden\",\n            \"value\": \"value\"\n        }\n    ],\n    \n  " +
+		"  \"restricted_dynamic_privileges\" : [\"BACKUP_ADMIN\",\"RESTORE_ADMIN\"],\n   " +
+		" \"restricted_static_privileges\" : [\"Insert_priv\",\"File_priv\"]\n}")
+
+	require.NoError(t, err)
+	require.NoError(t, f.Sync())
+
+	config, err := loadSEMConfig(configFile)
+	require.NoError(t, err)
+
+	err = isValidSEMConfig(*config)
+	require.NoError(t, err)
+
+	config.RestrictedDynamicPrivileges = append(config.RestrictedDynamicPrivileges, "RESTRICTED_STATUS_ADMIN")
+	require.Error(t, isValidSEMConfig(*config))
+
+	config.RestrictedDynamicPrivileges = append(config.RestrictedDynamicPrivileges, "File")
+	require.Error(t, isValidSEMConfig(*config))
+}
+
 func TestMaxIndexLength(t *testing.T) {
 	conf := NewConfig()
 	checkValid := func(indexLen int, shouldBeValid bool) {

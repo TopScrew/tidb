@@ -20,6 +20,8 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
+	"github.com/pingcap/tidb/pkg/parser/mysql"
+	"io"
 	"math"
 	"os"
 	"os/user"
@@ -97,6 +99,7 @@ const (
 	DefAuthTokenRefreshInterval = time.Hour
 	// EnvVarKeyspaceName is the system env name for keyspace name.
 	EnvVarKeyspaceName = "KEYSPACE_NAME"
+	restrictedPriv     = "RESTRICTED_"
 )
 
 // Valid config maps
@@ -601,6 +604,7 @@ type Security struct {
 	SpilledFileEncryptionMethod string `toml:"spilled-file-encryption-method" json:"spilled-file-encryption-method"`
 	// EnableSEM prevents SUPER users from having full access.
 	EnableSEM bool `toml:"enable-sem" json:"enable-sem"`
+	SEM       SEM  `toml:"-" json:"sem"`
 	// Allow automatic TLS certificate generation
 	AutoTLS         bool   `toml:"auto-tls" json:"auto-tls"`
 	MinTLSVersion   string `toml:"tls-version" json:"tls-version"`
@@ -612,6 +616,51 @@ type Security struct {
 	AuthTokenRefreshInterval string `toml:"auth-token-refresh-interval" json:"auth-token-refresh-interval"`
 	// Disconnect directly when the password is expired
 	DisconnectOnExpiredPassword bool `toml:"disconnect-on-expired-password" json:"disconnect-on-expired-password"`
+}
+
+// SEM is the Security Enhanced Mode configuration.
+type SEM struct {
+	Ver                         string               `toml:"ver" json:"ver"`
+	TidbMinVer                  string               `toml:"tidb-min-ver" json:"tidb-min-ver"`
+	RestrictedDatabases         []string             `toml:"restricted_databases" json:"restricted_databases"`
+	RestrictedTables            []RestrictedTable    `toml:"restricted_tables" json:"restricted_tables"`
+	RestrictedColumns           []RestrictedColumn   `toml:"restricted_columns" json:"restricted_columns"`
+	RestrictedVariables         []RestrictedVariable `toml:"restricted_variables" json:"restricted_variables"`
+	RestrictedStatus            []RestrictedState    `toml:"restricted_status" json:"restricted_status"`
+	RestrictedStaticPrivileges  []string             `toml:"restricted_static_privileges" json:"restricted_static_privileges"`
+	RestrictedDynamicPrivileges []string             `toml:"restricted_dynamic_privileges" json:"restricted_dynamic_privileges"`
+}
+
+// RestrictedTable is a table restricted under Security Enhanced Mode.
+type RestrictedTable struct {
+	Schema string `toml:"schema" json:"schema"`
+	Name   string `toml:"name" json:"name"`
+}
+
+// RestrictedColumn is a column restricted under Security Enhanced Mode.
+// The current restriction only applies to information_schema.
+type RestrictedColumn struct {
+	Name            string `toml:"name" json:"name"`
+	RestrictionType string `toml:"restriction-type" json:"restriction-type"`
+	Value           string `toml:"value" json:"value"`
+}
+
+// RestrictedVariable refers to the limitation of system variables in Security Enhanced Mode.
+type RestrictedVariable struct {
+	Name            string `toml:"name" json:"name"`
+	Scope           string `toml:"scope" json:"scope"`
+	RestrictionType string `toml:"restriction-type" json:"restriction-type"`
+	Readonly        bool   `toml:"readonly" json:"readonly"`
+	Value           string `toml:"value" json:"value"`
+}
+
+// RestrictedState refers to the limitation of status variables in Security Enhanced Mode.
+type RestrictedState struct {
+	Name            string `toml:"name" json:"name"`
+	Scope           string `toml:"scope" json:"scope"`
+	RestrictionType string `toml:"restriction-type" json:"restriction-type"`
+	Readonly        bool   `toml:"readonly" json:"readonly"`
+	Value           string `toml:"value" json:"value"`
 }
 
 // The ErrConfigValidationFailed error is used so that external callers can do a type assertion
@@ -1179,7 +1228,7 @@ func isAllRemovedConfigItems(items []string) bool {
 // The function enforceCmdArgs is used to merge the config file with command arguments:
 // For example, if you start TiDB by the command "./tidb-server --port=3000", the port number should be
 // overwritten to 3000 and ignore the port number in the config file.
-func InitializeConfig(confPath string, configCheck, configStrict bool, enforceCmdArgs func(*Config, *flag.FlagSet), fset *flag.FlagSet) {
+func InitializeConfig(confPath, semConfigPath string, configCheck, configStrict bool, enforceCmdArgs func(*Config, *flag.FlagSet), fset *flag.FlagSet) {
 	cfg := GetGlobalConfig()
 	var err error
 	if confPath != "" {
@@ -1208,7 +1257,6 @@ func InitializeConfig(confPath string, configCheck, configStrict bool, enforceCm
 				err = nil // treat as warning
 			}
 		}
-
 		terror.MustNil(err)
 	} else {
 		// configCheck should have the config file specified.
@@ -1217,6 +1265,17 @@ func InitializeConfig(confPath string, configCheck, configStrict bool, enforceCm
 			os.Exit(1)
 		}
 	}
+
+	// Load Security Enhanced Mode configuration file
+	if semConfigPath != "" {
+		config, err := loadSEMConfig(semConfigPath)
+		if err != nil {
+			err = fmt.Errorf("sem configuration loading failed: %w", err)
+		}
+		terror.MustNil(err)
+		cfg.Security.SEM = *config
+	}
+
 	enforceCmdArgs(cfg, fset)
 
 	if err := cfg.Valid(); err != nil {
@@ -1229,6 +1288,20 @@ func InitializeConfig(confPath string, configCheck, configStrict bool, enforceCm
 		fmt.Fprintln(os.Stderr, "invalid config", err)
 		os.Exit(1)
 	}
+
+	if semConfigPath != "" {
+		if err := isValidSEMConfig(cfg.Security.SEM); err != nil {
+			if !filepath.IsAbs(semConfigPath) {
+				if tmp, err := filepath.Abs(semConfigPath); err == nil {
+					semConfigPath = tmp
+				}
+			}
+			fmt.Fprintln(os.Stderr, "load sem config file:", semConfigPath)
+			fmt.Fprintln(os.Stderr, "invalid sem config", err)
+			os.Exit(1)
+		}
+	}
+
 	if configCheck {
 		fmt.Println("config check successful")
 		os.Exit(0)
@@ -1481,6 +1554,54 @@ func initByLDFlags(edition, checkBeforeDropLDFlag string) {
 	if checkBeforeDropLDFlag == "1" {
 		CheckTableBeforeDrop = true
 	}
+}
+
+// Load Security Enhanced Mode configuration via a JSON file.
+func loadSEMConfig(semConfigPath string) (*SEM, error) {
+	var semConfig SEM
+
+	file, err := os.Open(semConfigPath)
+	if err != nil {
+		return &semConfig, err
+	}
+
+	defer file.Close()
+
+	configBytes, err := io.ReadAll(file)
+	if err != nil {
+		return &semConfig, err
+	}
+
+	err = json.Unmarshal(configBytes, &semConfig)
+	if err != nil {
+		return &semConfig, err
+	}
+
+	return &semConfig, nil
+}
+
+// Validate the legality of Security Enhanced Mode configuration content.
+func isValidSEMConfig(semConfig SEM) error {
+
+	for _, privName := range semConfig.RestrictedDynamicPrivileges {
+		privName := strings.ToUpper(privName)
+		if len(privName) < 12 {
+			continue
+		}
+
+		if privName[:11] == restrictedPriv {
+			return fmt.Errorf("permissions prefixed with RESTRICTED_ are not allowed")
+		}
+	}
+
+	for _, privName := range semConfig.RestrictedStaticPrivileges {
+		privType := mysql.Col2PrivType
+		if _, ok := privType[privName]; !ok {
+			return fmt.Errorf("unrecognized permission %s", privName)
+		}
+	}
+
+	return nil
 }
 
 // hideConfig is used to filter a single line of config for hiding.

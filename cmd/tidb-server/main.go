@@ -18,6 +18,12 @@ import (
 	"context"
 	"flag"
 	"fmt"
+	"github.com/pingcap/failpoint"
+	"github.com/pingcap/tidb/pkg/resourcemanager"
+	"github.com/pingcap/tidb/pkg/util/cpuprofile"
+	"github.com/pingcap/tidb/pkg/util/metricsutil"
+	"github.com/pingcap/tidb/pkg/util/signal"
+	"github.com/pingcap/tidb/pkg/util/tiflashcompute"
 	"io/fs"
 	"os"
 	"runtime"
@@ -28,7 +34,6 @@ import (
 
 	"github.com/opentracing/opentracing-go"
 	"github.com/pingcap/errors"
-	"github.com/pingcap/failpoint"
 	"github.com/pingcap/log"
 	"github.com/pingcap/tidb/pkg/bindinfo"
 	"github.com/pingcap/tidb/pkg/config"
@@ -47,7 +52,6 @@ import (
 	plannercore "github.com/pingcap/tidb/pkg/planner/core"
 	"github.com/pingcap/tidb/pkg/plugin"
 	"github.com/pingcap/tidb/pkg/privilege/privileges"
-	"github.com/pingcap/tidb/pkg/resourcemanager"
 	"github.com/pingcap/tidb/pkg/server"
 	"github.com/pingcap/tidb/pkg/session"
 	"github.com/pingcap/tidb/pkg/session/txninfo"
@@ -61,7 +65,6 @@ import (
 	pumpcli "github.com/pingcap/tidb/pkg/tidb-binlog/pump_client"
 	"github.com/pingcap/tidb/pkg/util"
 	"github.com/pingcap/tidb/pkg/util/chunk"
-	"github.com/pingcap/tidb/pkg/util/cpuprofile"
 	"github.com/pingcap/tidb/pkg/util/deadlockhistory"
 	"github.com/pingcap/tidb/pkg/util/disk"
 	distroleutil "github.com/pingcap/tidb/pkg/util/distrole"
@@ -69,15 +72,12 @@ import (
 	"github.com/pingcap/tidb/pkg/util/kvcache"
 	"github.com/pingcap/tidb/pkg/util/logutil"
 	"github.com/pingcap/tidb/pkg/util/memory"
-	"github.com/pingcap/tidb/pkg/util/metricsutil"
 	"github.com/pingcap/tidb/pkg/util/printer"
 	"github.com/pingcap/tidb/pkg/util/sem"
-	"github.com/pingcap/tidb/pkg/util/signal"
 	stmtsummaryv2 "github.com/pingcap/tidb/pkg/util/stmtsummary/v2"
 	"github.com/pingcap/tidb/pkg/util/sys/linux"
 	storageSys "github.com/pingcap/tidb/pkg/util/sys/storage"
 	"github.com/pingcap/tidb/pkg/util/systimemon"
-	"github.com/pingcap/tidb/pkg/util/tiflashcompute"
 	"github.com/pingcap/tidb/pkg/util/topsql"
 	"github.com/pingcap/tidb/pkg/util/versioninfo"
 	"github.com/prometheus/client_golang/prometheus"
@@ -93,6 +93,7 @@ import (
 const (
 	nmVersion          = "V"
 	nmConfig           = "config"
+	nmSEMConfig        = "sem-config"
 	nmConfigCheck      = "config-check"
 	nmConfigStrict     = "config-strict"
 	nmStore            = "store"
@@ -134,10 +135,11 @@ const (
 )
 
 var (
-	version      *bool
-	configPath   *string
-	configCheck  *bool
-	configStrict *bool
+	version       *bool
+	configPath    *string
+	semConfigPath *string
+	configCheck   *bool
+	configStrict  *bool
 
 	// Base
 	store            *string
@@ -189,6 +191,7 @@ func initFlagSet() *flag.FlagSet {
 	fset := flag.NewFlagSet(os.Args[0], flag.ExitOnError)
 	version = flagBoolean(fset, nmVersion, false, "print version information and exit")
 	configPath = fset.String(nmConfig, "", "config file path")
+	semConfigPath = fset.String(nmSEMConfig, "", "security enhanced mode config file path")
 	configCheck = flagBoolean(fset, nmConfigCheck, false, "check config file validity and exit")
 	configStrict = flagBoolean(fset, nmConfigStrict, false, "enforce config file validity")
 
@@ -249,7 +252,7 @@ func initFlagSet() *flag.FlagSet {
 
 func main() {
 	fset := initFlagSet()
-	config.InitializeConfig(*configPath, *configCheck, *configStrict, overrideConfig, fset)
+	config.InitializeConfig(*configPath, *semConfigPath, *configCheck, *configStrict, overrideConfig, fset)
 	if *version {
 		setVersions()
 		fmt.Println(printer.GetTiDBInfo())
