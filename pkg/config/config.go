@@ -657,9 +657,7 @@ type RestrictedVariable struct {
 // RestrictedState refers to the limitation of status variables in Security Enhanced Mode.
 type RestrictedState struct {
 	Name            string `toml:"name" json:"name"`
-	Scope           string `toml:"scope" json:"scope"`
 	RestrictionType string `toml:"restriction-type" json:"restriction-type"`
-	Readonly        bool   `toml:"readonly" json:"readonly"`
 	Value           string `toml:"value" json:"value"`
 }
 

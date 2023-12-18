@@ -944,12 +944,6 @@ func (e *ShowExec) fetchShowStatus() error {
 		if e.GlobalScope && v.Scope == variable.ScopeSession {
 			continue
 		}
-		// Skip invisible status vars if permission fails.
-		if sem.IsEnabled() && sem.IsInvisibleStatusVar(status) {
-			if checker == nil || !checker.RequestDynamicVerification(sessionVars.ActiveRoles, "RESTRICTED_STATUS_ADMIN", false) {
-				continue
-			}
-		}
 		switch v.Value.(type) {
 		case []interface{}, nil:
 			v.Value = fmt.Sprintf("%v", v.Value)
@@ -957,6 +951,20 @@ func (e *ShowExec) fetchShowStatus() error {
 		value, err := types.ToString(v.Value)
 		if err != nil {
 			return errors.Trace(err)
+		}
+
+		// If permission fails, then skip or replace the invisible 'Status' variable.
+		if sem.IsEnabled() {
+			isRestricted, statusVar := sem.GetRestrictedStatusOfStateVariable(status)
+			if isRestricted {
+				unauthorized := checker == nil || !checker.RequestDynamicVerification(sessionVars.ActiveRoles, "RESTRICTED_STATUS_ADMIN", false)
+				if statusVar.RestrictionType == "hidden" && unauthorized {
+					continue
+				}
+				if statusVar.RestrictionType == "replace" && unauthorized {
+					value = statusVar.Value
+				}
+			}
 		}
 		e.appendRow([]interface{}{status, value})
 	}

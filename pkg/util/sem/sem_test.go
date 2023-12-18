@@ -15,6 +15,8 @@
 package sem
 
 import (
+	"github.com/pingcap/tidb/pkg/config"
+	"github.com/stretchr/testify/require"
 	"testing"
 
 	"github.com/pingcap/tidb/pkg/parser/mysql"
@@ -74,6 +76,42 @@ func TestIsInvisibleStatusVar(t *testing.T) {
 	assert.False(IsInvisibleStatusVar("server_id"))
 	assert.False(IsInvisibleStatusVar("ddl_schema_version"))
 	assert.False(IsInvisibleStatusVar("Ssl_version"))
+}
+
+func TestGetRestrictedStatusOfStateVariable(t *testing.T) {
+	tidbCfg := config.NewConfig()
+
+	tidbCfg.Security.SEM.RestrictedStatus = []config.RestrictedState{
+		{
+			Name:            "tidb_gc_leader_desc",
+			RestrictionType: "hidden",
+			Value:           "",
+		},
+		{
+			Name:            "server_id",
+			RestrictionType: "replace",
+			Value:           "",
+		},
+	}
+
+	config.StoreGlobalConfig(tidbCfg)
+
+	var restricted bool
+	var info *config.RestrictedState
+
+	restricted, info = GetRestrictedStatusOfStateVariable(tidbGCLeaderDesc)
+	require.True(t, restricted)
+	require.Equal(t, "hidden", info.RestrictionType)
+
+	restricted, info = GetRestrictedStatusOfStateVariable("server_id")
+	require.True(t, restricted)
+	require.Equal(t, "replace", info.RestrictionType)
+
+	restricted, info = GetRestrictedStatusOfStateVariable("ddl_schema_version")
+	require.False(t, restricted)
+
+	restricted, info = GetRestrictedStatusOfStateVariable("Ssl_version")
+	require.False(t, restricted)
 }
 
 func TestIsInvisibleSysVar(t *testing.T) {

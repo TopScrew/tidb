@@ -15,6 +15,7 @@
 package sem
 
 import (
+	"github.com/pingcap/tidb/pkg/config"
 	"os"
 	"strings"
 	"sync/atomic"
@@ -130,6 +131,19 @@ func IsInvisibleTable(dbLowerName, tblLowerName string) bool {
 // IsInvisibleStatusVar returns true if the status var needs to be hidden
 func IsInvisibleStatusVar(varName string) bool {
 	return varName == tidbGCLeaderDesc
+}
+
+// GetRestrictedStatusOfStateVariable Return the actual restricted status of the status variable.
+// false indicates no restriction.
+func GetRestrictedStatusOfStateVariable(varName string) (bool, *config.RestrictedState) {
+	cfg := config.GetGlobalConfig()
+	status := cfg.Security.SEM.RestrictedStatus
+	for _, state := range status {
+		if varName == state.Name {
+			return true, &state
+		}
+	}
+	return false, &config.RestrictedState{}
 }
 
 // IsInvisibleSysVar returns true if the sysvar needs to be hidden
