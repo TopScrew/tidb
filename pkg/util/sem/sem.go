@@ -15,12 +15,11 @@
 package sem
 
 import (
+	"fmt"
 	"github.com/pingcap/tidb/pkg/config"
 	"os"
-	"strings"
 	"sync/atomic"
 
-	"github.com/pingcap/tidb/pkg/parser/mysql"
 	"github.com/pingcap/tidb/pkg/sessionctx/variable"
 	"github.com/pingcap/tidb/pkg/util/logutil"
 )
@@ -97,33 +96,31 @@ func IsEnabled() bool {
 // IsInvisibleSchema returns true if the dbName needs to be hidden
 // when sem is enabled.
 func IsInvisibleSchema(dbName string) bool {
-	return strings.EqualFold(dbName, metricsSchema)
+	cfg := config.GetGlobalConfig()
+	for _, tbl := range cfg.Security.SEM.RestrictedDatabases {
+		if dbName == tbl {
+			logutil.BgLogger().Warn("SEM Warning: " + tbl + " is invisible")
+			return true
+		}
+	}
+	return false
+	//return strings.EqualFold(dbName, metricsSchema)
 }
 
 // IsInvisibleTable returns true if the  table needs to be hidden
 // when sem is enabled.
 func IsInvisibleTable(dbLowerName, tblLowerName string) bool {
-	switch dbLowerName {
-	case mysql.SystemDB:
-		switch tblLowerName {
-		case exprPushdownBlacklist, gcDeleteRange, gcDeleteRangeDone, optRuleBlacklist, tidb, globalVariables:
-			return true
-		}
-	case informationSchema:
-		switch tblLowerName {
-		case clusterConfig, clusterHardware, clusterLoad, clusterLog, clusterSystemInfo, inspectionResult,
-			inspectionRules, inspectionSummary, metricsSummary, metricsSummaryByLabel, metricsTables, tidbHotRegions:
-			return true
-		}
-	case performanceSchema:
-		switch tblLowerName {
-		case pdProfileAllocs, pdProfileBlock, pdProfileCPU, pdProfileGoroutines, pdProfileMemory,
-			pdProfileMutex, tidbProfileAllocs, tidbProfileBlock, tidbProfileCPU, tidbProfileGoroutines,
-			tidbProfileMemory, tidbProfileMutex, tikvProfileCPU:
-			return true
-		}
-	case metricsSchema:
+	cfg := config.GetGlobalConfig()
+	if IsInvisibleSchema(dbLowerName) {
 		return true
+	}
+
+	for _, tbl := range cfg.Security.SEM.RestrictedTables {
+		if dbLowerName == tbl.Schema && tblLowerName == tbl.Name {
+			fmt.Println(tbl.Schema + "." + tbl.Name + " is invisible")
+			logutil.BgLogger().Warn("SEM Warning: " + tbl.Schema + "." + tbl.Name + " is invisible")
+			return true
+		}
 	}
 	return false
 }
