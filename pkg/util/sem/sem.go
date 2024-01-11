@@ -97,9 +97,9 @@ func IsEnabled() bool {
 // when sem is enabled.
 func IsInvisibleSchema(dbName string) bool {
 	cfg := config.GetGlobalConfig()
-	for _, tbl := range cfg.Security.SEM.RestrictedDatabases {
-		if dbName == tbl {
-			logutil.BgLogger().Warn("SEM Warning: " + tbl + " is invisible")
+	for _, dbn := range cfg.Security.SEM.RestrictedDatabases {
+		if dbName == dbn {
+			logutil.BgLogger().Warn("SEM Warning: " + dbn + " is invisible")
 			return true
 		}
 	}
