@@ -945,6 +945,7 @@ func (e *ShowExec) fetchShowStatus() error {
 			continue
 		}
 		switch v.Value.(type) {
+
 		case []interface{}, nil:
 			v.Value = fmt.Sprintf("%v", v.Value)
 		}
