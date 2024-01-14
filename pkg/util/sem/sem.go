@@ -143,34 +143,27 @@ func GetRestrictedStatusOfStateVariable(varName string) (bool, *config.Restricte
 	return false, &config.RestrictedState{}
 }
 
-// IsInvisibleSysVar returns true if the sysvar needs to be hidden
+func GetRestrictedStatusOfVariables(varName string) (bool, *config.RestrictedVariable) {
+	cfg := config.GetGlobalConfig()
+	resVar := cfg.Security.SEM.RestrictedVariables
+	for _, state := range resVar {
+		if varName == state.Name {
+			return true, &state
+		}
+	}
+	return false, &config.RestrictedVariable{}
+}
+
+// IsInvisibleSysVar returns true if the sys var needs to be hidden
 func IsInvisibleSysVar(varNameInLower string) bool {
-	switch varNameInLower {
-	case variable.TiDBDDLSlowOprThreshold, // ddl_slow_threshold
-		variable.TiDBCheckMb4ValueInUTF8,
-		variable.TiDBConfig,
-		variable.TiDBEnableSlowLog,
-		variable.TiDBEnableTelemetry,
-		variable.TiDBExpensiveQueryTimeThreshold,
-		variable.TiDBForcePriority,
-		variable.TiDBGeneralLog,
-		variable.TiDBMetricSchemaRangeDuration,
-		variable.TiDBMetricSchemaStep,
-		variable.TiDBOptWriteRowID,
-		variable.TiDBPProfSQLCPU,
-		variable.TiDBRecordPlanInSlowLog,
-		variable.TiDBRowFormatVersion,
-		variable.TiDBSlowQueryFile,
-		variable.TiDBSlowLogThreshold,
-		variable.TiDBSlowTxnLogThreshold,
-		variable.TiDBEnableCollectExecutionInfo,
-		variable.TiDBMemoryUsageAlarmRatio,
-		variable.TiDBRedactLog,
-		variable.TiDBRestrictedReadOnly,
-		variable.TiDBTopSQLMaxTimeSeriesCount,
-		variable.TiDBTopSQLMaxMetaCount,
-		tidbAuditRetractLog:
-		return true
+	cfg := config.GetGlobalConfig()
+	for _, resvarName := range cfg.Security.SEM.RestrictedVariables {
+		if varNameInLower == resvarName.Name {
+			if resvarName.RestrictionType == "hidden" {
+				logutil.BgLogger().Warn("SEM Warning: " + resvarName.Name + " is invisible")
+				return true
+			}
+		}
 	}
 	return false
 }
