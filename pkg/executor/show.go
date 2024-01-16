@@ -897,9 +897,6 @@ func (e *ShowExec) fetchShowVariables(ctx context.Context) (err error) {
 				} else if fieldPatternsLike != nil && !fieldPatternsLike.DoMatch(v.Name) {
 					continue
 				}
-				if infoschema.SysVarHiddenForSem(e.Ctx(), v.Name) {
-					continue
-				}
 
 				if infoschema.SysGlobalVarReplacedForSem(e.Ctx(), v.Name) != "" {
 					value = infoschema.SysGlobalVarReplacedForSem(e.Ctx(), v.Name)
@@ -910,6 +907,11 @@ func (e *ShowExec) fetchShowVariables(ctx context.Context) (err error) {
 						return errors.Trace(err)
 					}
 				}
+
+				if infoschema.SysVarHiddenForSem(e.Ctx(), v.Name) && sem.IsInvisibleGlobalSysVar(v.Name) {
+					continue
+				}
+
 				e.appendRow([]interface{}{v.Name, value})
 			}
 		}
@@ -928,9 +930,6 @@ func (e *ShowExec) fetchShowVariables(ctx context.Context) (err error) {
 		} else if fieldPatternsLike != nil && !fieldPatternsLike.DoMatch(v.Name) {
 			continue
 		}
-		if infoschema.SysVarHiddenForSem(e.Ctx(), v.Name) {
-			continue
-		}
 
 		if infoschema.SysSessionVarReplacedForSem(e.Ctx(), v.Name) != "" {
 			value = infoschema.SysSessionVarReplacedForSem(e.Ctx(), v.Name)
@@ -940,6 +939,10 @@ func (e *ShowExec) fetchShowVariables(ctx context.Context) (err error) {
 			if err != nil {
 				return errors.Trace(err)
 			}
+		}
+
+		if infoschema.SysVarHiddenForSem(e.Ctx(), v.Name) {
+			continue
 		}
 		e.appendRow([]interface{}{v.Name, value})
 	}

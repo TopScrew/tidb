@@ -158,25 +158,24 @@ func IsInvisibleSysVar(varNameInLower string) bool {
 	return false
 }
 
-// IsReplacedSysVar returns true if the sys var need to be replaced
-func IsReplacedSysVar(varNameInLower string) bool {
+func IsInvisibleGlobalSysVar(varNameInLower string) bool {
+	if !IsInvisibleSysVar(varNameInLower) {
+		return false
+	}
 	cfg := config.GetGlobalConfig()
 	for _, resvarName := range cfg.Security.SEM.RestrictedVariables {
-		if varNameInLower == resvarName.Name && resvarName.RestrictionType == "replace" {
+		if varNameInLower == resvarName.Name && resvarName.Scope == "global" {
 			return true
 		}
 	}
 	return false
 }
 
-// IsGlobalReplacedSysVar returns true if the Global scope sys need to be replaced
-func IsGlobalReplacedSysVar(varNameInLower string) bool {
-	if !IsReplacedSysVar(varNameInLower) {
-		return false
-	}
+// IsReplacedSysVar returns true if the sys var need to be replaced
+func IsReplacedSysVar(varNameInLower string) bool {
 	cfg := config.GetGlobalConfig()
 	for _, resvarName := range cfg.Security.SEM.RestrictedVariables {
-		if varNameInLower == resvarName.Name && resvarName.Scope == "global" {
+		if varNameInLower == resvarName.Name && resvarName.RestrictionType == "replace" {
 			return true
 		}
 	}

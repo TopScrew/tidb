@@ -812,10 +812,6 @@ func setGlobalVars() {
 		sem.Enable()
 	}
 
-	if *semConfigPath != "" {
-		sem.Enable()
-	}
-
 	// For CI environment we default enable prepare-plan-cache.
 	if config.CheckTableBeforeDrop { // only for test
 		variable.SetSysVar(variable.TiDBEnablePrepPlanCache, variable.BoolToOnOff(true))
