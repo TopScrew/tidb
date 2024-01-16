@@ -76,12 +76,12 @@ func Enable() {
 	// variable.SetSysVar(variable.Hostname, variable.DefHostname)
 	// write to log so users understand why some operations are weird.
 
-	cfg := config.GetGlobalConfig()
-	for _, resVar := range cfg.Security.SEM.RestrictedVariables {
-		if resVar.RestrictionType == "replace" {
-			variable.SetSysVar(resVar.Name, resVar.Value)
-		}
-	}
+	//cfg := config.GetGlobalConfig()
+	//for _, resVar := range cfg.Security.SEM.RestrictedVariables {
+	//	if resVar.RestrictionType == "replace" {
+	//		variable.SetSysVar(resVar.Name, resVar.Value)
+	//	}
+	//}
 
 	logutil.BgLogger().Info("tidb-server is operating with security enhanced mode (SEM) enabled")
 }
