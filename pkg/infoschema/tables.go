@@ -2063,6 +2063,42 @@ func SysVarHiddenForSem(ctx sessionctx.Context, sysVarNameInLower string) bool {
 	return true
 }
 
+// SysGlobalVarReplacedForSem checks if a given global sysvar is replaced according to SEM and privileges
+func SysGlobalVarReplacedForSem(ctx sessionctx.Context, sysVarNameInLower string) string {
+	if !sem.IsEnabled() || !sem.IsReplacedSysVar(sysVarNameInLower) {
+		return ""
+	}
+	checker := privilege.GetPrivilegeManager(ctx)
+	if checker == nil || checker.RequestDynamicVerification(ctx.GetSessionVars().ActiveRoles, "RESTRICTED_VARIABLES_ADMIN", false) {
+		return ""
+	}
+	cfg := config.GetGlobalConfig()
+	for _, resVar := range cfg.Security.SEM.RestrictedVariables {
+		if resVar.Name == sysVarNameInLower && resVar.RestrictionType == "replace" && resVar.Scope == "global" {
+			return resVar.Value
+		}
+	}
+	return ""
+}
+
+// SysSessionVarReplacedForSem checks if a given session sysvar is replaced according to SEM and privileges
+func SysSessionVarReplacedForSem(ctx sessionctx.Context, sysVarNameInLower string) string {
+	if !sem.IsEnabled() || !sem.IsReplacedSysVar(sysVarNameInLower) {
+		return ""
+	}
+	checker := privilege.GetPrivilegeManager(ctx)
+	if checker == nil || checker.RequestDynamicVerification(ctx.GetSessionVars().ActiveRoles, "RESTRICTED_VARIABLES_ADMIN", false) {
+		return ""
+	}
+	cfg := config.GetGlobalConfig()
+	for _, resVar := range cfg.Security.SEM.RestrictedVariables {
+		if resVar.Name == sysVarNameInLower && resVar.RestrictionType == "replace" && resVar.Scope != "global" {
+			return resVar.Value
+		}
+	}
+	return ""
+}
+
 // GetDataFromSessionVariables return the [name, value] of all session variables
 func GetDataFromSessionVariables(ctx context.Context, sctx sessionctx.Context) ([][]types.Datum, error) {
 	sessionVars := sctx.GetSessionVars()

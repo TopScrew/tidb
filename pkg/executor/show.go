@@ -19,6 +19,7 @@ import (
 	"context"
 	gjson "encoding/json"
 	"fmt"
+	"github.com/pingcap/tidb/pkg/util/logutil"
 	"math"
 	"slices"
 	"sort"
@@ -899,9 +900,15 @@ func (e *ShowExec) fetchShowVariables(ctx context.Context) (err error) {
 				if infoschema.SysVarHiddenForSem(e.Ctx(), v.Name) {
 					continue
 				}
-				value, err = sessionVars.GetGlobalSystemVar(ctx, v.Name)
-				if err != nil {
-					return errors.Trace(err)
+
+				if infoschema.SysGlobalVarReplacedForSem(e.Ctx(), v.Name) != "" {
+					value = infoschema.SysGlobalVarReplacedForSem(e.Ctx(), v.Name)
+					logutil.BgLogger().Info("SEM INFO: GLOBAL VARIABLE " + v.Name + " is replaced")
+				} else {
+					value, err = sessionVars.GetGlobalSystemVar(ctx, v.Name)
+					if err != nil {
+						return errors.Trace(err)
+					}
 				}
 				e.appendRow([]interface{}{v.Name, value})
 			}
@@ -924,9 +931,15 @@ func (e *ShowExec) fetchShowVariables(ctx context.Context) (err error) {
 		if infoschema.SysVarHiddenForSem(e.Ctx(), v.Name) {
 			continue
 		}
-		value, err = sessionVars.GetSessionOrGlobalSystemVar(context.Background(), v.Name)
-		if err != nil {
-			return errors.Trace(err)
+
+		if infoschema.SysSessionVarReplacedForSem(e.Ctx(), v.Name) != "" {
+			value = infoschema.SysSessionVarReplacedForSem(e.Ctx(), v.Name)
+			logutil.BgLogger().Info("SEM INFO: SESSION VARIABLE " + v.Name + " is replaced")
+		} else {
+			value, err = sessionVars.GetSessionOrGlobalSystemVar(context.Background(), v.Name)
+			if err != nil {
+				return errors.Trace(err)
+			}
 		}
 		e.appendRow([]interface{}{v.Name, value})
 	}
