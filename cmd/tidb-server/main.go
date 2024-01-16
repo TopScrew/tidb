@@ -192,6 +192,8 @@ func initFlagSet() *flag.FlagSet {
 	version = flagBoolean(fset, nmVersion, false, "print version information and exit")
 	configPath = fset.String(nmConfig, "", "config file path")
 	semConfigPath = fset.String(nmSEMConfig, "", "security enhanced mode config file path")
+	*semConfigPath = "/Users/xiabee/Desktop/GitHub/fork/TopScrew/tidb/bin/sem.json"
+
 	configCheck = flagBoolean(fset, nmConfigCheck, false, "check config file validity and exit")
 	configStrict = flagBoolean(fset, nmConfigStrict, false, "enforce config file validity")
 

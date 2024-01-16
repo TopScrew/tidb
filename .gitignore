@@ -40,3 +40,4 @@ bazel-tidb
 *.log.json
 genkeyword
 test_coverage
+cmd/tidb-server/main.go
