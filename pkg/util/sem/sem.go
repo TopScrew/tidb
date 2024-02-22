@@ -214,30 +214,3 @@ func IsRestrictedPrivilege(privNameInUpper string) bool {
 	}
 	return privNameInUpper[:11] == restrictedPriv
 }
-
-// IsInvisibleColumn returns true if the column needs to be hidden
-func IsInvisibleColumn(schemaNameInLower string, tableNameInLower string, columnNameInLower string) bool {
-	cfg := config.GetGlobalConfig()
-	for _, col := range cfg.Security.SEM.RestrictedColumns {
-		if schemaNameInLower == col.Schema && tableNameInLower == col.Table && columnNameInLower == col.Name {
-			if col.RestrictionType == "hidden" {
-				logutil.BgLogger().Warn("SEM WARN: " + schemaNameInLower + "." + tableNameInLower + "." + columnNameInLower + " IS INVISIBLE")
-				return true
-			}
-		}
-	}
-	return false
-}
-
-// IsReplacedColumn returns string if the column needs to be replaced
-func IsReplacedColumn(schemaNameInLower string, tableNameInLower string, columnNameInLower string) bool {
-	cfg := config.GetGlobalConfig()
-	for _, col := range cfg.Security.SEM.RestrictedColumns {
-		if schemaNameInLower == col.Schema && tableNameInLower == col.Table && columnNameInLower == col.Name {
-			if col.RestrictionType == "replace" {
-				return true
-			}
-		}
-	}
-	return false
-}

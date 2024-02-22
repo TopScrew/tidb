@@ -2063,38 +2063,6 @@ func SysVarHiddenForSem(ctx sessionctx.Context, sysVarNameInLower string) bool {
 	return true
 }
 
-// SysColumnHiddenForSem checks if a given column is hidden according to SEM and privileges.
-func SysColumnHiddenForSem(ctx sessionctx.Context, schema string, table string, column string) bool {
-	if !sem.IsEnabled() || !sem.IsInvisibleColumn(schema, table, column) {
-		return false
-	}
-	checker := privilege.GetPrivilegeManager(ctx)
-	if checker == nil || checker.RequestDynamicVerification(ctx.GetSessionVars().ActiveRoles, "RESTRICTED_TABLES_ADMIN", false) {
-		return false
-	}
-	return true
-}
-
-// SysColumnReplacedForSem checks if a given column is replaced according to SEM and privileges.
-func SysColumnReplacedForSem(ctx sessionctx.Context, schema string, table string, column string) string {
-	if !sem.IsEnabled() || !sem.IsReplacedColumn(schema, table, column) {
-		return ""
-	}
-	checker := privilege.GetPrivilegeManager(ctx)
-	if checker == nil || checker.RequestDynamicVerification(ctx.GetSessionVars().ActiveRoles, "RESTRICTED_TABLES_ADMIN", false) {
-		return ""
-	}
-	cfg := config.GetGlobalConfig()
-	for _, resCol := range cfg.Security.SEM.RestrictedColumns {
-		if schema == resCol.Schema && table == resCol.Table && column == resCol.Name {
-			if resCol.RestrictionType == "replace" {
-				return resCol.Value
-			}
-		}
-	}
-	return ""
-}
-
 // GetDataFromSessionVariables return the [name, value] of all session variables
 func GetDataFromSessionVariables(ctx context.Context, sctx sessionctx.Context) ([][]types.Datum, error) {
 	sessionVars := sctx.GetSessionVars()

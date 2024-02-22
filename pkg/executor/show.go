@@ -671,8 +671,6 @@ func (e *ShowExec) fetchShowColumns(ctx context.Context) error {
 			continue
 		} else if fieldPatternsLike != nil && !fieldPatternsLike.DoMatch(col.Name.L) {
 			continue
-		} else if !checker.RequestVerification(activeRoles, e.DBName.L, tb.Meta().Name.L, col.Name.L, mysql.AllPrivMask) {
-			continue
 		}
 		desc := table.NewColDesc(col)
 		var columnDefault interface{}
@@ -2009,17 +2007,6 @@ func (e *ShowExec) tableAccessDenied(access string, table string) error {
 		h = user.AuthHostname
 	}
 	return exeerrors.ErrTableaccessDenied.GenWithStackByArgs(access, u, h, table)
-}
-
-func (e *ShowExec) columnAccessDenied(access string, table string, column string) error {
-	user := e.Ctx().GetSessionVars().User
-	u := user.Username
-	h := user.Hostname
-	if len(user.AuthUsername) > 0 && len(user.AuthHostname) > 0 {
-		u = user.AuthUsername
-		h = user.AuthHostname
-	}
-	return exeerrors.ErrColumnaccessDenied.GenWithStackByArgs(access, u, h, table, column)
 }
 
 func (e *ShowExec) appendRow(row []interface{}) {
