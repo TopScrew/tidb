@@ -2063,37 +2063,33 @@ func SysVarHiddenForSem(ctx sessionctx.Context, sysVarNameInLower string) bool {
 	return true
 }
 
-// SysGlobalVarReplacedForSem checks if a given global sysvar is replaced according to SEM and privileges
-func SysGlobalVarReplacedForSem(ctx sessionctx.Context, sysVarNameInLower string) string {
-	if !sem.IsEnabled() || !sem.IsReplacedSysVar(sysVarNameInLower) {
-		return ""
+// SysColumnHiddenForSem checks if a given column is hidden according to SEM and privileges.
+func SysColumnHiddenForSem(ctx sessionctx.Context, schema string, table string, column string) bool {
+	if !sem.IsEnabled() || !sem.IsInvisibleColumn(schema, table, column) {
+		return false
 	}
 	checker := privilege.GetPrivilegeManager(ctx)
-	if checker == nil || checker.RequestDynamicVerification(ctx.GetSessionVars().ActiveRoles, "RESTRICTED_VARIABLES_ADMIN", false) {
-		return ""
+	if checker == nil || checker.RequestDynamicVerification(ctx.GetSessionVars().ActiveRoles, "RESTRICTED_TABLES_ADMIN", false) {
+		return false
 	}
-	cfg := config.GetGlobalConfig()
-	for _, resVar := range cfg.Security.SEM.RestrictedVariables {
-		if resVar.Name == sysVarNameInLower && resVar.RestrictionType == "replace" && resVar.Scope == "global" {
-			return resVar.Value
-		}
-	}
-	return ""
+	return true
 }
 
-// SysSessionVarReplacedForSem checks if a given session sysvar is replaced according to SEM and privileges
-func SysSessionVarReplacedForSem(ctx sessionctx.Context, sysVarNameInLower string) string {
-	if !sem.IsEnabled() || !sem.IsReplacedSysVar(sysVarNameInLower) {
+// SysColumnReplacedForSem checks if a given column is replaced according to SEM and privileges.
+func SysColumnReplacedForSem(ctx sessionctx.Context, schema string, table string, column string) string {
+	if !sem.IsEnabled() || !sem.IsReplacedColumn(schema, table, column) {
 		return ""
 	}
 	checker := privilege.GetPrivilegeManager(ctx)
-	if checker == nil || checker.RequestDynamicVerification(ctx.GetSessionVars().ActiveRoles, "RESTRICTED_VARIABLES_ADMIN", false) {
+	if checker == nil || checker.RequestDynamicVerification(ctx.GetSessionVars().ActiveRoles, "RESTRICTED_TABLES_ADMIN", false) {
 		return ""
 	}
 	cfg := config.GetGlobalConfig()
-	for _, resVar := range cfg.Security.SEM.RestrictedVariables {
-		if resVar.Name == sysVarNameInLower && resVar.RestrictionType == "replace" && resVar.Scope != "global" {
-			return resVar.Value
+	for _, resCol := range cfg.Security.SEM.RestrictedColumns {
+		if schema == resCol.Schema && table == resCol.Table && column == resCol.Name {
+			if resCol.RestrictionType == "replace" {
+				return resCol.Value
+			}
 		}
 	}
 	return ""

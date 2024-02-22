@@ -15,9 +15,8 @@
 package sem
 
 import (
-	"fmt"
 	"github.com/pingcap/tidb/pkg/config"
-	"os"
+	"sync"
 	"sync/atomic"
 
 	"github.com/pingcap/tidb/pkg/sessionctx/variable"
@@ -68,14 +67,35 @@ var (
 	semEnabled int32
 )
 
+// sysMap record original value of sysvar
+var sysMap map[string]string
+var sysMapMutex sync.RWMutex
+
+// GetOrigVar Get original system variables
+func GetOrigVar(name string) string {
+	sysMapMutex.RLock()
+	defer sysMapMutex.RUnlock()
+	return sysMap[name]
+}
+
 // Enable enables SEM. This is intended to be used by the test-suite.
 // Dynamic configuration by users may be a security risk.
+
 func Enable() {
 	atomic.StoreInt32(&semEnabled, 1)
 	variable.SetSysVar(variable.TiDBEnableEnhancedSecurity, variable.On)
-	variable.SetSysVar(variable.Hostname, variable.DefHostname)
-	// write to log so users understand why some operations are weird.
+	//variable.SetSysVar(variable.Hostname, variable.DefHostname)
 
+	sysMap = make(map[string]string)
+
+	cfg := config.GetGlobalConfig()
+	for _, resVar := range cfg.Security.SEM.RestrictedVariables {
+		if resVar.RestrictionType == "replace" && sysMap[resVar.Name] == "" {
+			sysMap[resVar.Name] = variable.GetSysVar(resVar.Name).Value
+			variable.SetSysVar(resVar.Name, resVar.Value)
+		}
+	}
+	// write to log so users understand why some operations are weird.
 	logutil.BgLogger().Info("tidb-server is operating with security enhanced mode (SEM) enabled")
 }
 
@@ -84,9 +104,14 @@ func Enable() {
 func Disable() {
 	atomic.StoreInt32(&semEnabled, 0)
 	variable.SetSysVar(variable.TiDBEnableEnhancedSecurity, variable.Off)
-	if hostname, err := os.Hostname(); err == nil {
-		variable.SetSysVar(variable.Hostname, hostname)
+	for _, resVar := range sysMap {
+		variable.SetSysVar(resVar, sysMap[resVar])
 	}
+	sysMap = nil
+	//if hostname, err := os.Hostname(); err == nil {
+	//	variable.SetSysVar(variable.Hostname, hostname)
+	//}
+	logutil.BgLogger().Info("tidb-server is operating with security enhanced mode (SEM) disabled")
 }
 
 // IsEnabled checks if Security Enhanced Mode (SEM) is enabled
@@ -118,7 +143,6 @@ func IsInvisibleTable(dbLowerName, tblLowerName string) bool {
 
 	for _, tbl := range cfg.Security.SEM.RestrictedTables {
 		if dbLowerName == tbl.Schema && tblLowerName == tbl.Name {
-			fmt.Println(tbl.Schema + "." + tbl.Name + " is invisible")
 			logutil.BgLogger().Warn("SEM Warning: " + tbl.Schema + "." + tbl.Name + " is invisible")
 			return true
 		}
@@ -182,11 +206,38 @@ func IsReplacedSysVar(varNameInLower string) bool {
 	return false
 }
 
-// IsRestrictedPrivilege returns true if the privilege shuld not be satisfied by SUPER
+// IsRestrictedPrivilege returns true if the privilege should not be satisfied by SUPER
 // As most dynamic privileges are.
 func IsRestrictedPrivilege(privNameInUpper string) bool {
 	if len(privNameInUpper) < 12 {
 		return false
 	}
 	return privNameInUpper[:11] == restrictedPriv
+}
+
+// IsInvisibleColumn returns true if the column needs to be hidden
+func IsInvisibleColumn(schemaNameInLower string, tableNameInLower string, columnNameInLower string) bool {
+	cfg := config.GetGlobalConfig()
+	for _, col := range cfg.Security.SEM.RestrictedColumns {
+		if schemaNameInLower == col.Schema && tableNameInLower == col.Table && columnNameInLower == col.Name {
+			if col.RestrictionType == "hidden" {
+				logutil.BgLogger().Warn("SEM WARN: " + schemaNameInLower + "." + tableNameInLower + "." + columnNameInLower + " IS INVISIBLE")
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// IsReplacedColumn returns string if the column needs to be replaced
+func IsReplacedColumn(schemaNameInLower string, tableNameInLower string, columnNameInLower string) bool {
+	cfg := config.GetGlobalConfig()
+	for _, col := range cfg.Security.SEM.RestrictedColumns {
+		if schemaNameInLower == col.Schema && tableNameInLower == col.Table && columnNameInLower == col.Name {
+			if col.RestrictionType == "replace" {
+				return true
+			}
+		}
+	}
+	return false
 }
