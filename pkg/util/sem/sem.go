@@ -178,11 +178,19 @@ func IsInvisibleSysVar(varNameInLower string) bool {
 	return false
 }
 
-// IsRestrictedPrivilege returns true if the privilege shuld not be satisfied by SUPER
+// HasRestrictedPrivilegePrefix returns true if the privilege shuld not be satisfied by SUPER
 // As most dynamic privileges are.
-func IsRestrictedPrivilege(privNameInUpper string) bool {
+func HasRestrictedPrivilegePrefix(privNameInUpper string) bool {
 	if len(privNameInUpper) < 12 {
 		return false
 	}
 	return privNameInUpper[:11] == restrictedPriv
+}
+
+// IsStaticPermissionRestricted Returning true when statically permissions are hit first in the list.
+func IsStaticPermissionRestricted(privType mysql.PrivilegeType) bool {
+	cfg := config.GetGlobalConfig()
+	restrictedPrivileges := cfg.Security.SEM.RestrictedStaticPrivileges
+	_, ok := restrictedPrivileges[privType]
+	return ok
 }

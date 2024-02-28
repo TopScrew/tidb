@@ -1833,7 +1833,7 @@ func TestSkipGrantTable(t *testing.T) {
 	tk.MustExec(`GRANT SYSTEM_VARIABLES_ADMIN ON *.* TO 'test1'@'%';`)
 	tk.MustExec(`GRANT RESTRICTED_VARIABLES_ADMIN ON *.* TO 'test1'@'%';`)
 	tk.MustExec(`GRANT RESTRICTED_STATUS_ADMIN ON *.* TO 'test1'@'%';`)
-	tk.MustExec(`GRANT RESTRICTED_CONNECTION_ADMIN, CONNECTION_ADMIN ON *.* TO 'test1'@'%';`)
+	tk.MustExec(`GRANT RESTRICTED_USER_ADMIN, CONNECTION_ADMIN ON *.* TO 'test1'@'%';`)
 	tk.MustExec(`GRANT RESTRICTED_USER_ADMIN ON *.* TO 'test1'@'%';`)
 	tk.MustExec(`GRANT RESTRICTED_TABLES_ADMIN ON *.* TO 'test1'@'%';`)
 	tk.MustExec(`GRANT PROCESS ON *.* TO 'test1'@'%';`)

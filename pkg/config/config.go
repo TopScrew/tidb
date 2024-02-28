@@ -603,8 +603,9 @@ type Security struct {
 	// If set to "plaintext", the spilled files will not be encrypted.
 	SpilledFileEncryptionMethod string `toml:"spilled-file-encryption-method" json:"spilled-file-encryption-method"`
 	// EnableSEM prevents SUPER users from having full access.
-	EnableSEM bool `toml:"enable-sem" json:"enable-sem"`
-	SEM       SEM  `toml:"-" json:"sem"`
+	EnableSEM bool   `toml:"enable-sem" json:"enable-sem"`
+	SEMPath   string `toml:"sem-path" json:"sem-path"`
+	SEM       SEM    `toml:"-" json:"sem"`
 	// Allow automatic TLS certificate generation
 	AutoTLS         bool   `toml:"auto-tls" json:"auto-tls"`
 	MinTLSVersion   string `toml:"tls-version" json:"tls-version"`
@@ -620,15 +621,16 @@ type Security struct {
 
 // SEM is the Security Enhanced Mode configuration.
 type SEM struct {
-	Ver                         string               `toml:"ver" json:"ver"`
-	TidbMinVer                  string               `toml:"tidb-min-ver" json:"tidb-min-ver"`
-	RestrictedDatabases         []string             `toml:"restricted_databases" json:"restricted_databases"`
-	RestrictedTables            []RestrictedTable    `toml:"restricted_tables" json:"restricted_tables"`
-	RestrictedColumns           []RestrictedColumn   `toml:"restricted_columns" json:"restricted_columns"`
-	RestrictedVariables         []RestrictedVariable `toml:"restricted_variables" json:"restricted_variables"`
-	RestrictedStatus            []RestrictedState    `toml:"restricted_status" json:"restricted_status"`
-	RestrictedStaticPrivileges  []string             `toml:"restricted_static_privileges" json:"restricted_static_privileges"`
-	RestrictedDynamicPrivileges []string             `toml:"restricted_dynamic_privileges" json:"restricted_dynamic_privileges"`
+	Ver                           string                           `toml:"ver" json:"ver"`
+	TidbMinVer                    string                           `toml:"tidb-min-ver" json:"tidb-min-ver"`
+	RestrictedDatabases           []string                         `toml:"restricted_databases" json:"restricted_databases"`
+	RestrictedTables              []RestrictedTable                `toml:"restricted_tables" json:"restricted_tables"`
+	RestrictedColumns             []RestrictedColumn               `toml:"restricted_columns" json:"restricted_columns"`
+	RestrictedVariables           []RestrictedVariable             `toml:"restricted_variables" json:"restricted_variables"`
+	RestrictedStatus              []RestrictedState                `toml:"restricted_status" json:"restricted_status"`
+	RestrictedStaticPrivilegesCol []string                         `toml:"restricted_static_privileges_col" json:"restricted_static_privileges_col"`
+	RestrictedDynamicPrivileges   []string                         `toml:"restricted_dynamic_privileges" json:"restricted_dynamic_privileges"`
+	RestrictedStaticPrivileges    map[mysql.PrivilegeType]struct{} `toml:"restricted_static_privileges" json:"restricted_static_privileges"`
 }
 
 // RestrictedTable is a table restricted under Security Enhanced Mode.
@@ -1226,7 +1228,7 @@ func isAllRemovedConfigItems(items []string) bool {
 // The function enforceCmdArgs is used to merge the config file with command arguments:
 // For example, if you start TiDB by the command "./tidb-server --port=3000", the port number should be
 // overwritten to 3000 and ignore the port number in the config file.
-func InitializeConfig(confPath, semConfigPath string, configCheck, configStrict bool, enforceCmdArgs func(*Config, *flag.FlagSet), fset *flag.FlagSet) {
+func InitializeConfig(confPath string, configCheck, configStrict bool, enforceCmdArgs func(*Config, *flag.FlagSet), fset *flag.FlagSet) {
 	cfg := GetGlobalConfig()
 	var err error
 	if confPath != "" {
@@ -1265,6 +1267,7 @@ func InitializeConfig(confPath, semConfigPath string, configCheck, configStrict 
 	}
 
 	// Load Security Enhanced Mode configuration file
+	semConfigPath := cfg.Security.SEMPath
 	if semConfigPath != "" {
 		config, err := loadSEMConfig(semConfigPath)
 		if err != nil {
@@ -1575,6 +1578,15 @@ func loadSEMConfig(semConfigPath string) (*SEM, error) {
 		return &semConfig, err
 	}
 
+	staticPrivileges := make(map[mysql.PrivilegeType]struct{})
+	privType := mysql.Col2PrivType
+	for _, privName := range semConfig.RestrictedStaticPrivilegesCol {
+		if p, ok := privType[privName]; ok {
+			staticPrivileges[p] = struct{}{}
+		}
+	}
+
+	semConfig.RestrictedStaticPrivileges = staticPrivileges
 	return &semConfig, nil
 }
 
@@ -1592,7 +1604,7 @@ func isValidSEMConfig(semConfig SEM) error {
 		}
 	}
 
-	for _, privName := range semConfig.RestrictedStaticPrivileges {
+	for _, privName := range semConfig.RestrictedStaticPrivilegesCol {
 		privType := mysql.Col2PrivType
 		if _, ok := privType[privName]; !ok {
 			return fmt.Errorf("unrecognized permission %s", privName)

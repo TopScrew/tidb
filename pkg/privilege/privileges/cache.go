@@ -1133,7 +1133,7 @@ func (p *MySQLPrivilege) RequestDynamicVerification(activeRoles []*auth.RoleIden
 	}
 	// If SEM is enabled, and the privilege is of type restricted, do not fall through
 	// To using SUPER as a replacement privilege.
-	if sem.IsEnabled() && sem.IsRestrictedPrivilege(privName) {
+	if sem.IsEnabled() && sem.HasRestrictedPrivilegePrefix(privName) {
 		return false
 	}
 	// For compatibility reasons, the SUPER privilege also has all DYNAMIC privileges granted to it (dynamic privs are a super replacement)

@@ -123,6 +123,7 @@ func (e *SetExecutor) setSysVariable(ctx context.Context, name string, v *expres
 		pm := privilege.GetPrivilegeManager(e.Ctx())
 		privs := sysVar.RequireDynamicPrivileges(v.IsGlobal, semEnabled)
 		for _, priv := range privs {
+
 			if !pm.RequestDynamicVerification(sessionVars.ActiveRoles, priv, false) {
 				msg := priv
 				if !semEnabled {

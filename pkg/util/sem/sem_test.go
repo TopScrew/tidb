@@ -62,11 +62,11 @@ func TestIsInvisibleTable(t *testing.T) {
 func TestIsRestrictedPrivilege(t *testing.T) {
 	assert := assert.New(t)
 
-	assert.True(IsRestrictedPrivilege("RESTRICTED_TABLES_ADMIN"))
-	assert.True(IsRestrictedPrivilege("RESTRICTED_STATUS_VARIABLES_ADMIN"))
-	assert.False(IsRestrictedPrivilege("CONNECTION_ADMIN"))
-	assert.False(IsRestrictedPrivilege("BACKUP_ADMIN"))
-	assert.False(IsRestrictedPrivilege("aa"))
+	assert.True(HasRestrictedPrivilegePrefix("RESTRICTED_TABLES_ADMIN"))
+	assert.True(HasRestrictedPrivilegePrefix("RESTRICTED_STATUS_VARIABLES_ADMIN"))
+	assert.False(HasRestrictedPrivilegePrefix("CONNECTION_ADMIN"))
+	assert.False(HasRestrictedPrivilegePrefix("BACKUP_ADMIN"))
+	assert.False(HasRestrictedPrivilegePrefix("aa"))
 }
 
 func TestIsInvisibleStatusVar(t *testing.T) {

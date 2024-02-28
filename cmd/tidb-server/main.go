@@ -93,7 +93,6 @@ import (
 const (
 	nmVersion          = "V"
 	nmConfig           = "config"
-	nmSEMConfig        = "sem-config"
 	nmConfigCheck      = "config-check"
 	nmConfigStrict     = "config-strict"
 	nmStore            = "store"
@@ -191,7 +190,6 @@ func initFlagSet() *flag.FlagSet {
 	fset := flag.NewFlagSet(os.Args[0], flag.ExitOnError)
 	version = flagBoolean(fset, nmVersion, false, "print version information and exit")
 	configPath = fset.String(nmConfig, "", "config file path")
-	semConfigPath = fset.String(nmSEMConfig, "", "security enhanced mode config file path")
 	configCheck = flagBoolean(fset, nmConfigCheck, false, "check config file validity and exit")
 	configStrict = flagBoolean(fset, nmConfigStrict, false, "enforce config file validity")
 
@@ -252,7 +250,7 @@ func initFlagSet() *flag.FlagSet {
 
 func main() {
 	fset := initFlagSet()
-	config.InitializeConfig(*configPath, *semConfigPath, *configCheck, *configStrict, overrideConfig, fset)
+	config.InitializeConfig(*configPath, *configCheck, *configStrict, overrideConfig, fset)
 	if *version {
 		setVersions()
 		fmt.Println(printer.GetTiDBInfo())
