@@ -16,11 +16,10 @@ package sem
 
 import (
 	"github.com/pingcap/tidb/pkg/config"
-	"os"
-	"strings"
+	"github.com/pingcap/tidb/pkg/parser/mysql"
+	"sync"
 	"sync/atomic"
 
-	"github.com/pingcap/tidb/pkg/parser/mysql"
 	"github.com/pingcap/tidb/pkg/sessionctx/variable"
 	"github.com/pingcap/tidb/pkg/util/logutil"
 )
@@ -69,12 +68,34 @@ var (
 	semEnabled int32
 )
 
+// sysMap record original value of sysvar
+var sysMap map[string]string
+var sysMapMutex sync.RWMutex
+
+// GetOrigVar Get original system variables
+func GetOrigVar(name string) string {
+	sysMapMutex.RLock()
+	defer sysMapMutex.RUnlock()
+	return sysMap[name]
+}
+
 // Enable enables SEM. This is intended to be used by the test-suite.
 // Dynamic configuration by users may be a security risk.
+
 func Enable() {
 	atomic.StoreInt32(&semEnabled, 1)
 	variable.SetSysVar(variable.TiDBEnableEnhancedSecurity, variable.On)
-	variable.SetSysVar(variable.Hostname, variable.DefHostname)
+	//variable.SetSysVar(variable.Hostname, variable.DefHostname)
+
+	sysMap = make(map[string]string)
+
+	cfg := config.GetGlobalConfig()
+	for _, resVar := range cfg.Security.SEM.RestrictedVariables {
+		if resVar.RestrictionType == "replace" && sysMap[resVar.Name] == "" {
+			sysMap[resVar.Name] = variable.GetSysVar(resVar.Name).Value
+			variable.SetSysVar(resVar.Name, resVar.Value)
+		}
+	}
 	// write to log so users understand why some operations are weird.
 	logutil.BgLogger().Info("tidb-server is operating with security enhanced mode (SEM) enabled")
 }
@@ -84,9 +105,14 @@ func Enable() {
 func Disable() {
 	atomic.StoreInt32(&semEnabled, 0)
 	variable.SetSysVar(variable.TiDBEnableEnhancedSecurity, variable.Off)
-	if hostname, err := os.Hostname(); err == nil {
-		variable.SetSysVar(variable.Hostname, hostname)
+	for _, resVar := range sysMap {
+		variable.SetSysVar(resVar, sysMap[resVar])
 	}
+	sysMap = nil
+	//if hostname, err := os.Hostname(); err == nil {
+	//	variable.SetSysVar(variable.Hostname, hostname)
+	//}
+	logutil.BgLogger().Info("tidb-server is operating with security enhanced mode (SEM) disabled")
 }
 
 // IsEnabled checks if Security Enhanced Mode (SEM) is enabled
@@ -97,33 +123,30 @@ func IsEnabled() bool {
 // IsInvisibleSchema returns true if the dbName needs to be hidden
 // when sem is enabled.
 func IsInvisibleSchema(dbName string) bool {
-	return strings.EqualFold(dbName, metricsSchema)
+	cfg := config.GetGlobalConfig()
+	for _, dbn := range cfg.Security.SEM.RestrictedDatabases {
+		if dbName == dbn {
+			logutil.BgLogger().Warn("SEM Warning: " + dbn + " is invisible")
+			return true
+		}
+	}
+	return false
+	//return strings.EqualFold(dbName, metricsSchema)
 }
 
 // IsInvisibleTable returns true if the  table needs to be hidden
 // when sem is enabled.
 func IsInvisibleTable(dbLowerName, tblLowerName string) bool {
-	switch dbLowerName {
-	case mysql.SystemDB:
-		switch tblLowerName {
-		case exprPushdownBlacklist, gcDeleteRange, gcDeleteRangeDone, optRuleBlacklist, tidb, globalVariables:
-			return true
-		}
-	case informationSchema:
-		switch tblLowerName {
-		case clusterConfig, clusterHardware, clusterLoad, clusterLog, clusterSystemInfo, inspectionResult,
-			inspectionRules, inspectionSummary, metricsSummary, metricsSummaryByLabel, metricsTables, tidbHotRegions:
-			return true
-		}
-	case performanceSchema:
-		switch tblLowerName {
-		case pdProfileAllocs, pdProfileBlock, pdProfileCPU, pdProfileGoroutines, pdProfileMemory,
-			pdProfileMutex, tidbProfileAllocs, tidbProfileBlock, tidbProfileCPU, tidbProfileGoroutines,
-			tidbProfileMemory, tidbProfileMutex, tikvProfileCPU:
-			return true
-		}
-	case metricsSchema:
+	cfg := config.GetGlobalConfig()
+	if IsInvisibleSchema(dbLowerName) {
 		return true
+	}
+
+	for _, tbl := range cfg.Security.SEM.RestrictedTables {
+		if dbLowerName == tbl.Schema && tblLowerName == tbl.Name {
+			logutil.BgLogger().Warn("SEM Warning: " + tbl.Schema + "." + tbl.Name + " is invisible")
+			return true
+		}
 	}
 	return false
 }
@@ -146,34 +169,40 @@ func GetRestrictedStatusOfStateVariable(varName string) (bool, *config.Restricte
 	return false, &config.RestrictedState{}
 }
 
-// IsInvisibleSysVar returns true if the sysvar needs to be hidden
+// IsInvisibleSysVar returns true if the sys var needs to be hidden
 func IsInvisibleSysVar(varNameInLower string) bool {
-	switch varNameInLower {
-	case variable.TiDBDDLSlowOprThreshold, // ddl_slow_threshold
-		variable.TiDBCheckMb4ValueInUTF8,
-		variable.TiDBConfig,
-		variable.TiDBEnableSlowLog,
-		variable.TiDBEnableTelemetry,
-		variable.TiDBExpensiveQueryTimeThreshold,
-		variable.TiDBForcePriority,
-		variable.TiDBGeneralLog,
-		variable.TiDBMetricSchemaRangeDuration,
-		variable.TiDBMetricSchemaStep,
-		variable.TiDBOptWriteRowID,
-		variable.TiDBPProfSQLCPU,
-		variable.TiDBRecordPlanInSlowLog,
-		variable.TiDBRowFormatVersion,
-		variable.TiDBSlowQueryFile,
-		variable.TiDBSlowLogThreshold,
-		variable.TiDBSlowTxnLogThreshold,
-		variable.TiDBEnableCollectExecutionInfo,
-		variable.TiDBMemoryUsageAlarmRatio,
-		variable.TiDBRedactLog,
-		variable.TiDBRestrictedReadOnly,
-		variable.TiDBTopSQLMaxTimeSeriesCount,
-		variable.TiDBTopSQLMaxMetaCount,
-		tidbAuditRetractLog:
-		return true
+	cfg := config.GetGlobalConfig()
+	for _, resvarName := range cfg.Security.SEM.RestrictedVariables {
+		if varNameInLower == resvarName.Name {
+			if resvarName.RestrictionType == "hidden" {
+				logutil.BgLogger().Warn("SEM Warning: " + resvarName.Name + " is invisible")
+				return true
+			}
+		}
+	}
+	return false
+}
+
+func IsInvisibleGlobalSysVar(varNameInLower string) bool {
+	if !IsInvisibleSysVar(varNameInLower) {
+		return false
+	}
+	cfg := config.GetGlobalConfig()
+	for _, resvarName := range cfg.Security.SEM.RestrictedVariables {
+		if varNameInLower == resvarName.Name && resvarName.Scope == "global" {
+			return true
+		}
+	}
+	return false
+}
+
+// IsReplacedSysVar returns true if the sys var need to be replaced
+func IsReplacedSysVar(varNameInLower string) bool {
+	cfg := config.GetGlobalConfig()
+	for _, resvarName := range cfg.Security.SEM.RestrictedVariables {
+		if varNameInLower == resvarName.Name && resvarName.RestrictionType == "replace" {
+			return true
+		}
 	}
 	return false
 }
