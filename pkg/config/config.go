@@ -625,7 +625,6 @@ type SEM struct {
 	TidbMinVer                    string                           `toml:"tidb-min-ver" json:"tidb-min-ver"`
 	RestrictedDatabases           []string                         `toml:"restricted_databases" json:"restricted_databases"`
 	RestrictedTables              []RestrictedTable                `toml:"restricted_tables" json:"restricted_tables"`
-	RestrictedColumns             []RestrictedColumn               `toml:"restricted_columns" json:"restricted_columns"`
 	RestrictedVariables           []RestrictedVariable             `toml:"restricted_variables" json:"restricted_variables"`
 	RestrictedStatus              []RestrictedState                `toml:"restricted_status" json:"restricted_status"`
 	RestrictedStaticPrivilegesCol []string                         `toml:"restricted_static_privileges_col" json:"restricted_static_privileges_col"`
