@@ -131,7 +131,7 @@ func (txn *LazyTxn) flushStmtBuf() {
 	buf := txn.Transaction.GetMemBuffer()
 
 	if txn.lazyUniquenessCheckEnabled {
-		keysNeedSetPersistentPNE := kv.FindKeysInStage(buf, txn.stagingHandle, func(k kv.Key, flags kv.KeyFlags, v []byte) bool {
+		keysNeedSetPersistentPNE := kv.FindKeysInStage(buf, txn.stagingHandle, func(_ kv.Key, flags kv.KeyFlags, _ []byte) bool {
 			return flags.HasPresumeKeyNotExists()
 		})
 		for _, key := range keysNeedSetPersistentPNE {
@@ -256,7 +256,7 @@ func (txn *LazyTxn) GoString() string {
 }
 
 // GetOption implements the GetOption
-func (txn *LazyTxn) GetOption(opt int) interface{} {
+func (txn *LazyTxn) GetOption(opt int) any {
 	if txn.Transaction == nil {
 		if opt == kv.TxnScope {
 			return ""
@@ -307,7 +307,14 @@ func (txn *LazyTxn) changePendingToValid(ctx context.Context, sctx sessionctx.Co
 		txn.mu.TxnInfo.AllSQLDigests)
 
 	// set resource group name for kv request such as lock pessimistic keys.
-	kv.SetTxnResourceGroup(txn, sctx.GetSessionVars().ResourceGroupName)
+	kv.SetTxnResourceGroup(txn, sctx.GetSessionVars().StmtCtx.ResourceGroupName)
+	// overwrite entry size limit by sys var.
+	if entrySizeLimit := sctx.GetSessionVars().TxnEntrySizeLimit; entrySizeLimit > 0 {
+		txn.SetOption(kv.SizeLimits, kv.TxnSizeLimits{
+			Entry: entrySizeLimit,
+			Total: kv.TxnTotalSizeLimit.Load(),
+		})
+	}
 
 	return nil
 }

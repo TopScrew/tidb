@@ -309,7 +309,7 @@ func (builder *RequestBuilder) SetFromSessionVars(sv *variable.SessionVars) *Req
 	builder.RequestSource.RequestSourceType = sv.RequestSourceType
 	builder.RequestSource.ExplicitRequestSourceType = sv.ExplicitRequestSourceType
 	builder.StoreBatchSize = sv.StoreBatchSize
-	builder.Request.ResourceGroupName = sv.ResourceGroupName
+	builder.Request.ResourceGroupName = sv.StmtCtx.ResourceGroupName
 	builder.Request.StoreBusyThreshold = sv.LoadBasedReplicaReadThreshold
 	builder.Request.RunawayChecker = sv.StmtCtx.RunawayChecker
 	builder.Request.TiKVClientReadTimeout = sv.GetTiKVClientReadTimeout()
@@ -339,7 +339,7 @@ func (builder *RequestBuilder) SetTiDBServerID(serverID uint64) *RequestBuilder 
 
 // SetFromInfoSchema sets the following fields from infoSchema:
 // "bundles"
-func (builder *RequestBuilder) SetFromInfoSchema(pis interface{}) *RequestBuilder {
+func (builder *RequestBuilder) SetFromInfoSchema(pis any) *RequestBuilder {
 	is, ok := pis.(infoschema.InfoSchema)
 	if !ok {
 		return builder

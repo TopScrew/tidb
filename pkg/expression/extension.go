@@ -24,7 +24,6 @@ import (
 	"github.com/pingcap/tidb/pkg/parser/auth"
 	"github.com/pingcap/tidb/pkg/parser/mysql"
 	"github.com/pingcap/tidb/pkg/privilege"
-	"github.com/pingcap/tidb/pkg/sessionctx"
 	"github.com/pingcap/tidb/pkg/sessionctx/variable"
 	"github.com/pingcap/tidb/pkg/types"
 	"github.com/pingcap/tidb/pkg/util/chunk"
@@ -96,7 +95,7 @@ func newExtensionFuncClass(def *extension.FunctionDef) (*extensionFuncClass, err
 	}, nil
 }
 
-func (c *extensionFuncClass) getFunction(ctx sessionctx.Context, args []Expression) (builtinFunc, error) {
+func (c *extensionFuncClass) getFunction(ctx BuildContext, args []Expression) (builtinFunc, error) {
 	if err := c.checkPrivileges(ctx); err != nil {
 		return nil, err
 	}
@@ -113,7 +112,7 @@ func (c *extensionFuncClass) getFunction(ctx sessionctx.Context, args []Expressi
 	return sig, nil
 }
 
-func (c *extensionFuncClass) checkPrivileges(ctx sessionctx.Context) error {
+func (c *extensionFuncClass) checkPrivileges(ctx BuildContext) error {
 	fn := c.funcDef.RequireDynamicPrivileges
 	if fn == nil {
 		return nil
@@ -155,7 +154,7 @@ func (b *extensionFuncSig) Clone() builtinFunc {
 	return newSig
 }
 
-func (b *extensionFuncSig) evalString(ctx sessionctx.Context, row chunk.Row) (string, bool, error) {
+func (b *extensionFuncSig) evalString(ctx EvalContext, row chunk.Row) (string, bool, error) {
 	if b.EvalTp == types.ETString {
 		fnCtx := newExtensionFnContext(ctx, b)
 		return b.EvalStringFunc(fnCtx, row)
@@ -163,7 +162,7 @@ func (b *extensionFuncSig) evalString(ctx sessionctx.Context, row chunk.Row) (st
 	return b.baseBuiltinFunc.evalString(ctx, row)
 }
 
-func (b *extensionFuncSig) evalInt(ctx sessionctx.Context, row chunk.Row) (int64, bool, error) {
+func (b *extensionFuncSig) evalInt(ctx EvalContext, row chunk.Row) (int64, bool, error) {
 	if b.EvalTp == types.ETInt {
 		fnCtx := newExtensionFnContext(ctx, b)
 		return b.EvalIntFunc(fnCtx, row)
@@ -173,11 +172,11 @@ func (b *extensionFuncSig) evalInt(ctx sessionctx.Context, row chunk.Row) (int64
 
 type extensionFnContext struct {
 	context.Context
-	ctx sessionctx.Context
+	ctx EvalContext
 	sig *extensionFuncSig
 }
 
-func newExtensionFnContext(ctx sessionctx.Context, sig *extensionFuncSig) extensionFnContext {
+func newExtensionFnContext(ctx EvalContext, sig *extensionFuncSig) extensionFnContext {
 	return extensionFnContext{Context: context.TODO(), ctx: ctx, sig: sig}
 }
 

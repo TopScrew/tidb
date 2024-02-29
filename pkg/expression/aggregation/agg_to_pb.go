@@ -22,7 +22,6 @@ import (
 	"github.com/pingcap/tidb/pkg/expression"
 	"github.com/pingcap/tidb/pkg/kv"
 	"github.com/pingcap/tidb/pkg/parser/ast"
-	"github.com/pingcap/tidb/pkg/sessionctx"
 	"github.com/pingcap/tidb/pkg/sessionctx/variable"
 	"github.com/pingcap/tidb/pkg/types"
 	"github.com/pingcap/tidb/pkg/util/codec"
@@ -100,7 +99,7 @@ func (desc *baseFuncDesc) GetTiPBExpr(tryWindowDesc bool) (tp tipb.ExprType) {
 }
 
 // AggFuncToPBExpr converts aggregate function to pb.
-func AggFuncToPBExpr(sctx sessionctx.Context, client kv.Client, aggFunc *AggFuncDesc, storeType kv.StoreType) (*tipb.Expr, error) {
+func AggFuncToPBExpr(sctx expression.EvalContext, client kv.Client, aggFunc *AggFuncDesc, storeType kv.StoreType) (*tipb.Expr, error) {
 	pc := expression.NewPBConverter(client, sctx)
 	tp := aggFunc.GetTiPBExpr(false)
 	if !client.IsRequestTypeSupported(kv.ReqTypeSelect, int64(tp)) {
@@ -184,7 +183,7 @@ func PBAggFuncModeToAggFuncMode(pbMode *tipb.AggFunctionMode) (mode AggFunctionM
 }
 
 // PBExprToAggFuncDesc converts pb to aggregate function.
-func PBExprToAggFuncDesc(ctx sessionctx.Context, aggFunc *tipb.Expr, fieldTps []*types.FieldType) (*AggFuncDesc, error) {
+func PBExprToAggFuncDesc(ctx expression.BuildContext, aggFunc *tipb.Expr, fieldTps []*types.FieldType) (*AggFuncDesc, error) {
 	var name string
 	switch aggFunc.Tp {
 	case tipb.ExprType_Count:

@@ -38,6 +38,7 @@ import (
 	"github.com/pingcap/tidb/pkg/types"
 	"github.com/pingcap/tidb/pkg/util/codec"
 	"github.com/stretchr/testify/require"
+	pdhttp "github.com/tikv/pd/client/http"
 	"go.uber.org/atomic"
 )
 
@@ -277,11 +278,11 @@ func (c *testSplitClient) ScanRegions(ctx context.Context, key, endKey []byte, l
 	return regions, err
 }
 
-func (c *testSplitClient) GetPlacementRule(ctx context.Context, groupID, ruleID string) (r pdtypes.Rule, err error) {
+func (c *testSplitClient) GetPlacementRule(ctx context.Context, groupID, ruleID string) (r *pdhttp.Rule, err error) {
 	return
 }
 
-func (c *testSplitClient) SetPlacementRule(ctx context.Context, rule pdtypes.Rule) error {
+func (c *testSplitClient) SetPlacementRule(ctx context.Context, rule *pdhttp.Rule) error {
 	return nil
 }
 
@@ -461,9 +462,8 @@ func doTestBatchSplitRegionByRanges(ctx context.Context, t *testing.T, hook clie
 	keys := [][]byte{[]byte(""), []byte("aay"), []byte("bba"), []byte("bbh"), []byte("cca"), []byte("")}
 	client := initTestSplitClient(keys, hook)
 	local := &Backend{
-		splitCli:         client,
-		regionSizeGetter: &TableRegionSizeGetterImpl{},
-		logger:           log.L(),
+		splitCli: client,
+		logger:   log.L(),
 	}
 	local.RegionSplitBatchSize = 4
 	local.RegionSplitConcurrency = 4
@@ -720,9 +720,8 @@ func TestSplitAndScatterRegionInBatches(t *testing.T) {
 	keys := [][]byte{[]byte(""), []byte("a"), []byte("b"), []byte("")}
 	client := initTestSplitClient(keys, nil)
 	local := &Backend{
-		splitCli:         client,
-		regionSizeGetter: &TableRegionSizeGetterImpl{},
-		logger:           log.L(),
+		splitCli: client,
+		logger:   log.L(),
 	}
 	local.RegionSplitBatchSize = 4
 	local.RegionSplitConcurrency = 4
@@ -806,9 +805,8 @@ func doTestBatchSplitByRangesWithClusteredIndex(t *testing.T, hook clientHook) {
 	keys = append(keys, tableEndKey, []byte(""))
 	client := initTestSplitClient(keys, hook)
 	local := &Backend{
-		splitCli:         client,
-		regionSizeGetter: &TableRegionSizeGetterImpl{},
-		logger:           log.L(),
+		splitCli: client,
+		logger:   log.L(),
 	}
 	local.RegionSplitBatchSize = 10
 	local.RegionSplitConcurrency = 10

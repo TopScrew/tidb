@@ -20,6 +20,7 @@ import (
 	"context"
 	"slices"
 	"time"
+	"unsafe"
 
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/tidb/pkg/distsql"
@@ -42,6 +43,7 @@ import (
 	"github.com/pingcap/tidb/pkg/util/logutil"
 	"github.com/pingcap/tidb/pkg/util/memory"
 	"github.com/pingcap/tidb/pkg/util/ranger"
+	"github.com/pingcap/tidb/pkg/util/size"
 	"github.com/pingcap/tidb/pkg/util/stringutil"
 	"github.com/pingcap/tidb/pkg/util/tracing"
 	"github.com/pingcap/tipb/go-tipb"
@@ -112,7 +114,8 @@ type TableReaderExecutor struct {
 	byItems   []*util.ByItems
 	paging    bool
 	storeType kv.StoreType
-	// corColInFilter tells whether there's correlated column in filter.
+	// corColInFilter tells whether there's correlated column in filter (both conditions in PhysicalSelection and LateMaterializationFilterCondition in PhysicalTableScan)
+	// If true, we will need to revise the dagPB (fill correlated column value in filter) each time call Open().
 	corColInFilter bool
 	// corColInAccess tells whether there's correlated column in access conditions.
 	corColInAccess bool
@@ -138,6 +141,20 @@ func (e *TableReaderExecutor) setDummy() {
 	e.dummy = true
 }
 
+func (e *TableReaderExecutor) memUsage() int64 {
+	const sizeofTableReaderExecutor = int64(unsafe.Sizeof(*(*TableReaderExecutor)(nil)))
+
+	res := sizeofTableReaderExecutor
+	res += size.SizeOfPointer * int64(cap(e.ranges))
+	for _, v := range e.ranges {
+		res += v.MemUsage()
+	}
+	res += kv.KeyRangeSliceMemUsage(e.kvRanges)
+	res += int64(e.dagPB.Size())
+	// TODO: add more statistics
+	return res
+}
+
 // Open initializes necessary variables for using this executor.
 func (e *TableReaderExecutor) Open(ctx context.Context) error {
 	r, ctx := tracing.StartRegionEx(ctx, "TableReaderExecutor.Open")
@@ -156,6 +173,7 @@ func (e *TableReaderExecutor) Open(ctx context.Context) error {
 
 	var err error
 	if e.corColInFilter {
+		// If there's correlated column in filter, need to rewrite dagPB
 		if e.storeType == kv.TiFlash {
 			execs, err := builder.ConstructTreeBasedDistExec(e.Ctx(), e.tablePlan)
 			if err != nil {

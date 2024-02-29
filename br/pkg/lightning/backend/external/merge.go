@@ -6,7 +6,6 @@ import (
 	"github.com/google/uuid"
 	"github.com/pingcap/tidb/br/pkg/lightning/log"
 	"github.com/pingcap/tidb/br/pkg/storage"
-	tidbkv "github.com/pingcap/tidb/pkg/kv"
 	"github.com/pingcap/tidb/pkg/util/logutil"
 	"github.com/pingcap/tidb/pkg/util/size"
 	"go.uber.org/zap"
@@ -23,6 +22,7 @@ func MergeOverlappingFiles(
 	readBufferSize int,
 	newFilePrefix string,
 	blockSize int,
+	memSizeLimit uint64,
 	writeBatchCount uint64,
 	propSizeDist uint64,
 	propKeysDist uint64,
@@ -53,7 +53,7 @@ func MergeOverlappingFiles(
 	for _, files := range dataFilesSlice {
 		files := files
 		eg.Go(func() error {
-			return mergeOverlappingFilesV2(
+			return mergeOverlappingFilesInternal(
 				egCtx,
 				files,
 				store,
@@ -61,7 +61,7 @@ func MergeOverlappingFiles(
 				readBufferSize,
 				newFilePrefix,
 				uuid.New().String(),
-				DefaultMemSizeLimit,
+				memSizeLimit,
 				blockSize,
 				writeBatchCount,
 				propSizeDist,
@@ -74,68 +74,9 @@ func MergeOverlappingFiles(
 	return eg.Wait()
 }
 
-// unused for now.
-func mergeOverlappingFilesImpl(ctx context.Context,
-	paths []string,
-	store storage.ExternalStorage,
-	readBufferSize int,
-	newFilePrefix string,
-	writerID string,
-	memSizeLimit uint64,
-	blockSize int,
-	writeBatchCount uint64,
-	propSizeDist uint64,
-	propKeysDist uint64,
-	onClose OnCloseFunc,
-	checkHotspot bool,
-) (err error) {
-	task := log.BeginTask(logutil.Logger(ctx).With(
-		zap.String("writer-id", writerID),
-		zap.Int("file-count", len(paths)),
-	), "merge overlapping files")
-	defer func() {
-		task.End(zap.ErrorLevel, err)
-	}()
-
-	zeroOffsets := make([]uint64, len(paths))
-	iter, err := NewMergeKVIter(ctx, paths, zeroOffsets, store, readBufferSize, checkHotspot, 0)
-	if err != nil {
-		return err
-	}
-	defer func() {
-		err := iter.Close()
-		if err != nil {
-			logutil.Logger(ctx).Warn("close iterator failed", zap.Error(err))
-		}
-	}()
-
-	writer := NewWriterBuilder().
-		SetMemorySizeLimit(memSizeLimit).
-		SetBlockSize(blockSize).
-		SetOnCloseFunc(onClose).
-		SetWriterBatchCount(writeBatchCount).
-		SetPropSizeDistance(propSizeDist).
-		SetPropKeysDistance(propKeysDist).
-		Build(store, newFilePrefix, writerID)
-
-	// currently use same goroutine to do read and write. The main advantage is
-	// there's no KV copy and iter can reuse the buffer.
-	for iter.Next() {
-		err = writer.WriteRow(ctx, iter.Key(), iter.Value(), nil)
-		if err != nil {
-			return err
-		}
-	}
-	err = iter.Error()
-	if err != nil {
-		return err
-	}
-	return writer.Close(ctx)
-}
-
-// mergeOverlappingFilesV2 reads from given files whose key range may overlap
+// mergeOverlappingFilesInternal reads from given files whose key range may overlap
 // and writes to one new sorted, nonoverlapping files.
-func mergeOverlappingFilesV2(
+func mergeOverlappingFilesInternal(
 	ctx context.Context,
 	paths []string,
 	store storage.ExternalStorage,
@@ -183,14 +124,10 @@ func mergeOverlappingFilesV2(
 	if err != nil {
 		return nil
 	}
-	var minKey, maxKey tidbkv.Key
 
 	// currently use same goroutine to do read and write. The main advantage is
 	// there's no KV copy and iter can reuse the buffer.
 	for iter.Next() {
-		if len(minKey) == 0 {
-			minKey = tidbkv.Key(iter.Key()).Clone()
-		}
 		err = writer.WriteRow(ctx, iter.Key(), iter.Value())
 		if err != nil {
 			return err
@@ -200,26 +137,6 @@ func mergeOverlappingFilesV2(
 	if err != nil {
 		return err
 	}
-	maxKey = tidbkv.Key(iter.Key()).Clone()
 
-	var stat MultipleFilesStat
-	stat.Filenames = append(stat.Filenames,
-		[2]string{writer.dataFile, writer.statFile})
-	stat.build([]tidbkv.Key{minKey}, []tidbkv.Key{maxKey})
-	if onClose != nil {
-		onClose(&WriterSummary{
-			WriterID:           writer.writerID,
-			Seq:                0,
-			Min:                minKey,
-			Max:                maxKey,
-			TotalSize:          writer.totalSize,
-			MultipleFilesStats: []MultipleFilesStat{stat},
-		})
-	}
-
-	err = writer.Close(ctx)
-	if err != nil {
-		return err
-	}
-	return nil
+	return writer.Close(ctx)
 }
