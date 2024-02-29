@@ -16,7 +16,6 @@ package sem
 
 import (
 	"github.com/pingcap/tidb/pkg/config"
-	"github.com/stretchr/testify/require"
 	"testing"
 
 	"github.com/pingcap/tidb/pkg/parser/mysql"
@@ -69,16 +68,9 @@ func TestIsRestrictedPrivilege(t *testing.T) {
 	assert.False(HasRestrictedPrivilegePrefix("aa"))
 }
 
-func TestIsInvisibleStatusVar(t *testing.T) {
+func TestGetRestrictedStatusOfStateVariable(t *testing.T) {
 	assert := assert.New(t)
 
-	assert.True(IsInvisibleStatusVar(tidbGCLeaderDesc))
-	assert.False(IsInvisibleStatusVar("server_id"))
-	assert.False(IsInvisibleStatusVar("ddl_schema_version"))
-	assert.False(IsInvisibleStatusVar("Ssl_version"))
-}
-
-func TestGetRestrictedStatusOfStateVariable(t *testing.T) {
 	tidbCfg := config.NewConfig()
 
 	tidbCfg.Security.SEM.RestrictedStatus = []config.RestrictedState{
@@ -90,7 +82,7 @@ func TestGetRestrictedStatusOfStateVariable(t *testing.T) {
 		{
 			Name:            "server_id",
 			RestrictionType: "replace",
-			Value:           "",
+			Value:           "xxxx",
 		},
 	}
 
@@ -100,18 +92,37 @@ func TestGetRestrictedStatusOfStateVariable(t *testing.T) {
 	var info *config.RestrictedState
 
 	restricted, info = GetRestrictedStatusOfStateVariable(tidbGCLeaderDesc)
-	require.True(t, restricted)
-	require.Equal(t, "hidden", info.RestrictionType)
+	assert.True(restricted)
+	assert.Equal("tidb_gc_leader_desc", info.Name)
+	assert.Equal("hidden", info.RestrictionType)
 
 	restricted, info = GetRestrictedStatusOfStateVariable("server_id")
-	require.True(t, restricted)
-	require.Equal(t, "replace", info.RestrictionType)
+	assert.True(restricted)
+	assert.Equal("server_id", info.Name)
+	assert.Equal("replace", info.RestrictionType)
+	assert.Equal("xxxx", info.Value)
 
 	restricted, info = GetRestrictedStatusOfStateVariable("ddl_schema_version")
-	require.False(t, restricted)
+	assert.False(restricted)
 
 	restricted, info = GetRestrictedStatusOfStateVariable("Ssl_version")
-	require.False(t, restricted)
+	assert.False(restricted)
+}
+
+func TestIsStaticPermissionRestricted(t *testing.T) {
+
+	tidbCfg := config.NewConfig()
+	p := make(map[mysql.PrivilegeType]struct{})
+	p[mysql.FilePriv] = struct{}{}
+	p[mysql.ShutdownPriv] = struct{}{}
+	tidbCfg.Security.SEM.RestrictedStaticPrivileges = p
+	config.StoreGlobalConfig(tidbCfg)
+	assert := assert.New(t)
+	assert.True(IsStaticPermissionRestricted(mysql.FilePriv))
+	assert.False(IsStaticPermissionRestricted(mysql.AlterPriv))
+	assert.True(IsStaticPermissionRestricted(mysql.ShutdownPriv))
+	assert.False(IsStaticPermissionRestricted(mysql.CreatePriv))
+	assert.False(IsStaticPermissionRestricted(mysql.AllPriv))
 }
 
 func TestIsInvisibleSysVar(t *testing.T) {

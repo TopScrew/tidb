@@ -151,11 +151,6 @@ func IsInvisibleTable(dbLowerName, tblLowerName string) bool {
 	return false
 }
 
-// IsInvisibleStatusVar returns true if the status var needs to be hidden
-func IsInvisibleStatusVar(varName string) bool {
-	return varName == tidbGCLeaderDesc
-}
-
 // GetRestrictedStatusOfStateVariable Return the actual restricted status of the status variable.
 // false indicates no restriction.
 func GetRestrictedStatusOfStateVariable(varName string) (bool, *config.RestrictedState) {

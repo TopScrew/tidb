@@ -629,7 +629,6 @@ type SEM struct {
 	RestrictedVariables           []RestrictedVariable             `toml:"restricted_variables" json:"restricted_variables"`
 	RestrictedStatus              []RestrictedState                `toml:"restricted_status" json:"restricted_status"`
 	RestrictedStaticPrivilegesCol []string                         `toml:"restricted_static_privileges_col" json:"restricted_static_privileges_col"`
-	RestrictedDynamicPrivileges   []string                         `toml:"restricted_dynamic_privileges" json:"restricted_dynamic_privileges"`
 	RestrictedStaticPrivileges    map[mysql.PrivilegeType]struct{} `toml:"restricted_static_privileges" json:"restricted_static_privileges"`
 }
 
@@ -1592,17 +1591,6 @@ func loadSEMConfig(semConfigPath string) (*SEM, error) {
 
 // Validate the legality of Security Enhanced Mode configuration content.
 func isValidSEMConfig(semConfig SEM) error {
-
-	for _, privName := range semConfig.RestrictedDynamicPrivileges {
-		privName := strings.ToUpper(privName)
-		if len(privName) < 12 {
-			continue
-		}
-
-		if privName[:11] == restrictedPriv {
-			return fmt.Errorf("permissions prefixed with RESTRICTED_ are not allowed")
-		}
-	}
 
 	for _, privName := range semConfig.RestrictedStaticPrivilegesCol {
 		privType := mysql.Col2PrivType

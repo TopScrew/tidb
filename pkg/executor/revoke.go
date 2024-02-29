@@ -91,18 +91,15 @@ func (e *RevokeExec) Next(ctx context.Context, _ *chunk.Chunk) error {
 		currentUser := e.Ctx().GetSessionVars().User
 		checker := privilege.GetPrivilegeManager(e.Ctx())
 		hasRestrictedPrivAdmin := checker.RequestDynamicVerificationWithUser("RESTRICTED_PRIV_ADMIN", false, currentUser)
-
 		hitRestrictedPrefix := false
 		hitRestrictedList := false
 
 		for _, priv := range e.Privs {
-
 			privName := strings.ToUpper(priv.Name)
 			if sem.HasRestrictedPrivilegePrefix(privName) {
 				hitRestrictedPrefix = true
 				break
 			}
-
 			if priv.Priv != mysql.ExtendedPriv && sem.IsStaticPermissionRestricted(priv.Priv) {
 				hitRestrictedList = true
 				break
