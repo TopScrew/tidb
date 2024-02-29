@@ -39,6 +39,7 @@ import (
 	"github.com/pingcap/tidb/pkg/sessionctx/variable"
 	statsutil "github.com/pingcap/tidb/pkg/statistics/handle/util"
 	"github.com/pingcap/tidb/pkg/tablecodec"
+	"github.com/pingcap/tidb/pkg/types"
 	"github.com/pingcap/tidb/pkg/util/filter"
 	"github.com/pingcap/tidb/pkg/util/gcutil"
 	"github.com/pingcap/tidb/pkg/util/logutil"
@@ -73,7 +74,7 @@ const (
 )
 
 func closePDSchedule() error {
-	closeMap := make(map[string]interface{})
+	closeMap := make(map[string]any)
 	for _, key := range pdScheduleKey {
 		closeMap[key] = 0
 	}
@@ -85,7 +86,7 @@ func savePDSchedule(job *model.Job) error {
 	if err != nil {
 		return err
 	}
-	saveValue := make(map[string]interface{})
+	saveValue := make(map[string]any)
 	for _, key := range pdScheduleKey {
 		saveValue[key] = retValue[key]
 	}
@@ -93,7 +94,7 @@ func savePDSchedule(job *model.Job) error {
 	return nil
 }
 
-func recoverPDSchedule(pdScheduleParam map[string]interface{}) error {
+func recoverPDSchedule(pdScheduleParam map[string]any) error {
 	if pdScheduleParam == nil {
 		return nil
 	}
@@ -251,7 +252,7 @@ func checkAndSetFlashbackClusterInfo(se sessionctx.Context, d *ddlCtx, t *meta.M
 		return errors.Trace(err)
 	}
 
-	flashbackTSString := oracle.GetTimeFromTS(flashbackTS).String()
+	flashbackTSString := oracle.GetTimeFromTS(flashbackTS).Format(types.TimeFSPFormat)
 
 	// Check if there is an upgrade during [flashbackTS, now)
 	sql := fmt.Sprintf("select VARIABLE_VALUE from mysql.tidb as of timestamp '%s' where VARIABLE_NAME='tidb_server_version'", flashbackTSString)
@@ -641,7 +642,7 @@ func (w *worker) onFlashbackCluster(d *ddlCtx, t *meta.Meta, job *model.Job) (ve
 	}
 
 	var flashbackTS, lockedRegions, startTS, commitTS uint64
-	var pdScheduleValue map[string]interface{}
+	var pdScheduleValue map[string]any
 	var autoAnalyzeValue, readOnlyValue, ttlJobEnableValue string
 	var gcEnabledValue bool
 	var keyRanges []kv.KeyRange
@@ -786,7 +787,7 @@ func finishFlashbackCluster(w *worker, job *model.Job) error {
 	}
 
 	var flashbackTS, lockedRegions, startTS, commitTS uint64
-	var pdScheduleValue map[string]interface{}
+	var pdScheduleValue map[string]any
 	var autoAnalyzeValue, readOnlyValue, ttlJobEnableValue string
 	var gcEnabled bool
 
@@ -799,7 +800,7 @@ func finishFlashbackCluster(w *worker, job *model.Job) error {
 	}
 	defer w.sessPool.Put(sess)
 
-	err = kv.RunInNewTxn(w.ctx, w.store, true, func(ctx context.Context, txn kv.Transaction) error {
+	err = kv.RunInNewTxn(w.ctx, w.store, true, func(context.Context, kv.Transaction) error {
 		if err = recoverPDSchedule(pdScheduleValue); err != nil {
 			return err
 		}

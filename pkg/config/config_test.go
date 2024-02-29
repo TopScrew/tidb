@@ -1239,8 +1239,8 @@ func TestModifyThroughLDFlags(t *testing.T) {
 		EnableTelemetry       bool
 		CheckTableBeforeDrop  bool
 	}{
-		{"Community", "None", true, false},
-		{"Community", "1", true, true},
+		{"Community", "None", false, false},
+		{"Community", "1", false, true},
 		{"Enterprise", "None", false, false},
 		{"Enterprise", "1", false, true},
 	}
@@ -1250,7 +1250,7 @@ func TestModifyThroughLDFlags(t *testing.T) {
 	originalGlobalConfig := GetGlobalConfig()
 
 	for _, test := range tests {
-		defaultConf.EnableTelemetry = true
+		defaultConf.EnableTelemetry = false
 		CheckTableBeforeDrop = false
 
 		initByLDFlags(test.Edition, test.CheckBeforeDropLDFlag)

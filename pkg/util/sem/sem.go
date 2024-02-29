@@ -134,7 +134,7 @@ func IsInvisibleSchema(dbName string) bool {
 	//return strings.EqualFold(dbName, metricsSchema)
 }
 
-// IsInvisibleTable returns true if the  table needs to be hidden
+// IsInvisibleTable returns true if the table needs to be hidden
 // when sem is enabled.
 func IsInvisibleTable(dbLowerName, tblLowerName string) bool {
 	cfg := config.GetGlobalConfig()

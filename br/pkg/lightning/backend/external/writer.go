@@ -21,6 +21,7 @@ import (
 	"encoding/hex"
 	"path/filepath"
 	"slices"
+	"sort"
 	"strconv"
 	"time"
 
@@ -44,9 +45,9 @@ var (
 
 	// MergeSortOverlapThreshold is the threshold of overlap between sorted kv files.
 	// if the overlap ratio is greater than this threshold, we will merge the files.
-	MergeSortOverlapThreshold int64 = 1000
+	MergeSortOverlapThreshold int64 = 4000
 	// MergeSortFileCountStep is the step of file count when we split the sorted kv files.
-	MergeSortFileCountStep = 1000
+	MergeSortFileCountStep = 4000
 )
 
 const (
@@ -79,14 +80,16 @@ func (rc *rangePropertiesCollector) encode() []byte {
 
 // WriterSummary is the summary of a writer.
 type WriterSummary struct {
-	WriterID string
-	Seq      int
+	WriterID    string
+	GroupOffset int
+	Seq         int
 	// Min and Max are the min and max key written by this writer, both are
 	// inclusive, i.e. [Min, Max].
 	// will be empty if no key is written.
 	Min                tidbkv.Key
 	Max                tidbkv.Key
 	TotalSize          uint64
+	TotalCnt           uint64
 	MultipleFilesStats []MultipleFilesStat
 }
 
@@ -98,6 +101,7 @@ func dummyOnCloseFunc(*WriterSummary) {}
 
 // WriterBuilder builds a new Writer.
 type WriterBuilder struct {
+	groupOffset     int
 	memSizeLimit    uint64
 	blockSize       int
 	writeBatchCount uint64
@@ -167,6 +171,15 @@ func (b *WriterBuilder) SetBlockSize(blockSize int) *WriterBuilder {
 	return b
 }
 
+// SetGroupOffset set the group offset of a writer.
+// This can be used to group the summaries from different writers.
+// For example, for adding multiple indexes with multi-schema-change,
+// we use to distinguish the summaries from different indexes.
+func (b *WriterBuilder) SetGroupOffset(offset int) *WriterBuilder {
+	b.groupOffset = offset
+	return b
+}
+
 // Build builds a new Writer. The files writer will create are under the prefix
 // of "{prefix}/{writerID}".
 func (b *WriterBuilder) Build(
@@ -192,12 +205,12 @@ func (b *WriterBuilder) Build(
 		},
 		memSizeLimit:   b.memSizeLimit,
 		store:          store,
-		kvBuffer:       p.NewBuffer(membuf.WithMemoryLimit(b.memSizeLimit)),
+		kvBuffer:       p.NewBuffer(membuf.WithBufferMemoryLimit(b.memSizeLimit)),
 		currentSeq:     0,
 		filenamePrefix: filenamePrefix,
 		keyAdapter:     keyAdapter,
 		writerID:       writerID,
-		kvStore:        nil,
+		groupOffset:    b.groupOffset,
 		onClose:        b.onClose,
 		closed:         false,
 		multiFileStats: make([]MultipleFilesStat, 1),
@@ -209,8 +222,8 @@ func (b *WriterBuilder) Build(
 	return ret
 }
 
-// BuildOneFile builds a new one file Writer. The writer will create only one file under the prefix
-// of "{prefix}/{writerID}".
+// BuildOneFile builds a new one file Writer. The writer will create only one
+// file under the prefix of "{prefix}/{writerID}".
 func (b *WriterBuilder) BuildOneFile(
 	store storage.ExternalStorage,
 	prefix string,
@@ -226,7 +239,7 @@ func (b *WriterBuilder) BuildOneFile(
 			propSizeDist: b.propSizeDist,
 			propKeysDist: b.propKeysDist,
 		},
-		kvBuffer:       p.NewBuffer(membuf.WithMemoryLimit(b.memSizeLimit)),
+		kvBuffer:       p.NewBuffer(membuf.WithBufferMemoryLimit(b.memSizeLimit)),
 		store:          store,
 		filenamePrefix: filenamePrefix,
 		writerID:       writerID,
@@ -241,10 +254,30 @@ func (b *WriterBuilder) BuildOneFile(
 // every 500 files). It is used to estimate the data overlapping, and per-file
 // statistic information maybe too big to loaded into memory.
 type MultipleFilesStat struct {
-	MinKey            tidbkv.Key  `json:"min-key"`
-	MaxKey            tidbkv.Key  `json:"max-key"`
-	Filenames         [][2]string `json:"filenames"` // [dataFile, statFile]
+	MinKey tidbkv.Key `json:"min-key"`
+	MaxKey tidbkv.Key `json:"max-key"`
+	// Filenames is a list of [dataFile, statFile] paris, and it's sorted by the
+	// first key of the data file.
+	Filenames         [][2]string `json:"filenames"`
 	MaxOverlappingNum int64       `json:"max-overlapping-num"`
+}
+
+type startKeysAndFiles struct {
+	startKeys []tidbkv.Key
+	files     [][2]string
+}
+
+func (s *startKeysAndFiles) Len() int {
+	return len(s.startKeys)
+}
+
+func (s *startKeysAndFiles) Less(i, j int) bool {
+	return s.startKeys[i].Cmp(s.startKeys[j]) < 0
+}
+
+func (s *startKeysAndFiles) Swap(i, j int) {
+	s.startKeys[i], s.startKeys[j] = s.startKeys[j], s.startKeys[i]
+	s.files[i], s.files[j] = s.files[j], s.files[i]
 }
 
 func (m *MultipleFilesStat) build(startKeys, endKeys []tidbkv.Key) {
@@ -261,6 +294,9 @@ func (m *MultipleFilesStat) build(startKeys, endKeys []tidbkv.Key) {
 			m.MaxKey = endKeys[i]
 		}
 	}
+	// make Filenames sorted by startKeys
+	s := &startKeysAndFiles{startKeys, m.Filenames}
+	sort.Sort(s)
 
 	points := make([]Endpoint, 0, len(startKeys)*2)
 	for _, k := range startKeys {
@@ -290,12 +326,12 @@ func GetMaxOverlappingTotal(stats []MultipleFilesStat) int64 {
 type Writer struct {
 	store          storage.ExternalStorage
 	writerID       string
+	groupOffset    int
 	currentSeq     int
 	filenamePrefix string
 	keyAdapter     common.KeyAdapter
 
-	kvStore *KeyValueStore
-	rc      *rangePropertiesCollector
+	rc *rangePropertiesCollector
 
 	memSizeLimit uint64
 
@@ -318,6 +354,7 @@ type Writer struct {
 	minKey    tidbkv.Key
 	maxKey    tidbkv.Key
 	totalSize uint64
+	totalCnt  uint64
 }
 
 // WriteRow implements ingest.Writer.
@@ -349,6 +386,7 @@ func (w *Writer) WriteRow(ctx context.Context, idxKey, idxVal []byte, handle tid
 	w.kvLocations = append(w.kvLocations, loc)
 	w.kvSize += int64(encodedKeyLen + len(idxVal))
 	w.batchSize += uint64(length)
+	w.totalCnt += 1
 	return nil
 }
 
@@ -382,10 +420,12 @@ func (w *Writer) Close(ctx context.Context) error {
 	w.kvLocations = nil
 	w.onClose(&WriterSummary{
 		WriterID:           w.writerID,
+		GroupOffset:        w.groupOffset,
 		Seq:                w.currentSeq,
 		Min:                w.minKey,
 		Max:                w.maxKey,
 		TotalSize:          w.totalSize,
+		TotalCnt:           w.totalCnt,
 		MultipleFilesStats: w.multiFileStats,
 	})
 	return nil
@@ -401,94 +441,58 @@ func (w *Writer) recordMinMax(newMin, newMax tidbkv.Key, size uint64) {
 	w.totalSize += size
 }
 
+const flushKVsRetryTimes = 3
+
 func (w *Writer) flushKVs(ctx context.Context, fromClose bool) (err error) {
 	if len(w.kvLocations) == 0 {
 		return nil
 	}
 
-	logger := logutil.Logger(ctx)
-	dataFile, statFile, dataWriter, statWriter, err := w.createStorageWriter(ctx)
-	if err != nil {
-		return err
-	}
-
-	var (
-		savedBytes                  uint64
-		statSize                    int
-		sortDuration, writeDuration time.Duration
-		writeStartTime              time.Time
+	logger := logutil.Logger(ctx).With(
+		zap.String("writer-id", w.writerID),
+		zap.Int("sequence-number", w.currentSeq),
 	)
-	savedBytes = w.batchSize
-	startTs := time.Now()
-
-	kvCnt := len(w.kvLocations)
-	defer func() {
-		w.currentSeq++
-		err1, err2 := dataWriter.Close(ctx), statWriter.Close(ctx)
-		if err != nil {
-			return
-		}
-		if err1 != nil {
-			logger.Error("close data writer failed", zap.Error(err1))
-			err = err1
-			return
-		}
-		if err2 != nil {
-			logger.Error("close stat writer failed", zap.Error(err2))
-			err = err2
-			return
-		}
-		writeDuration = time.Since(writeStartTime)
-		logger.Info("flush kv",
-			zap.Uint64("bytes", savedBytes),
-			zap.Int("kv-cnt", kvCnt),
-			zap.Int("stat-size", statSize),
-			zap.Duration("sort-time", sortDuration),
-			zap.Duration("write-time", writeDuration),
-			zap.String("sort-speed(kv/s)", getSpeed(uint64(kvCnt), sortDuration.Seconds(), false)),
-			zap.String("write-speed(bytes/s)", getSpeed(savedBytes, writeDuration.Seconds(), true)),
-			zap.String("writer-id", w.writerID),
-		)
-		metrics.GlobalSortWriteToCloudStorageDuration.WithLabelValues("write").Observe(writeDuration.Seconds())
-		metrics.GlobalSortWriteToCloudStorageRate.WithLabelValues("write").Observe(float64(savedBytes) / 1024.0 / 1024.0 / writeDuration.Seconds())
-		metrics.GlobalSortWriteToCloudStorageDuration.WithLabelValues("sort_and_write").Observe(time.Since(startTs).Seconds())
-		metrics.GlobalSortWriteToCloudStorageRate.WithLabelValues("sort_and_write").Observe(float64(savedBytes) / 1024.0 / 1024.0 / time.Since(startTs).Seconds())
-	}()
-
 	sortStart := time.Now()
 	slices.SortFunc(w.kvLocations, func(i, j membuf.SliceLocation) int {
 		return bytes.Compare(w.getKeyByLoc(i), w.getKeyByLoc(j))
 	})
-	sortDuration = time.Since(sortStart)
-
-	writeStartTime = time.Now()
+	sortDuration := time.Since(sortStart)
 	metrics.GlobalSortWriteToCloudStorageDuration.WithLabelValues("sort").Observe(sortDuration.Seconds())
-	metrics.GlobalSortWriteToCloudStorageRate.WithLabelValues("sort").Observe(float64(savedBytes) / 1024.0 / 1024.0 / sortDuration.Seconds())
-	w.kvStore, err = NewKeyValueStore(ctx, dataWriter, w.rc)
-	if err != nil {
-		return err
-	}
+	metrics.GlobalSortWriteToCloudStorageRate.WithLabelValues("sort").Observe(float64(w.batchSize) / 1024.0 / 1024.0 / sortDuration.Seconds())
 
-	for _, pair := range w.kvLocations {
-		err = w.kvStore.addEncodedData(w.kvBuffer.GetSlice(pair))
-		if err != nil {
-			return err
+	writeStartTime := time.Now()
+	var dataFile, statFile string
+	for i := 0; i < flushKVsRetryTimes; i++ {
+		dataFile, statFile, err = w.flushSortedKVs(ctx)
+		if err == nil {
+			break
 		}
+		logger.Warn("flush sorted kv failed",
+			zap.Error(err),
+			zap.Int("retry-count", i),
+		)
 	}
-
-	w.kvStore.Close()
-	encodedStat := w.rc.encode()
-	statSize = len(encodedStat)
-	_, err = statWriter.Write(ctx, encodedStat)
 	if err != nil {
 		return err
 	}
+	writeDuration := time.Since(writeStartTime)
+	kvCnt := len(w.kvLocations)
+	logger.Info("flush kv",
+		zap.Uint64("bytes", w.batchSize),
+		zap.Int("kv-cnt", kvCnt),
+		zap.Duration("sort-time", sortDuration),
+		zap.Duration("write-time", writeDuration),
+		zap.String("sort-speed(kv/s)", getSpeed(uint64(kvCnt), sortDuration.Seconds(), false)),
+		zap.String("writer-id", w.writerID),
+	)
+	totalDuration := time.Since(sortStart)
+	metrics.GlobalSortWriteToCloudStorageDuration.WithLabelValues("sort_and_write").Observe(totalDuration.Seconds())
+	metrics.GlobalSortWriteToCloudStorageRate.WithLabelValues("sort_and_write").Observe(float64(w.batchSize) / 1024.0 / 1024.0 / totalDuration.Seconds())
 
 	minKey, maxKey := w.getKeyByLoc(w.kvLocations[0]), w.getKeyByLoc(w.kvLocations[len(w.kvLocations)-1])
 	w.recordMinMax(minKey, maxKey, uint64(w.kvSize))
 
 	// maintain 500-batch statistics
-
 	l := len(w.multiFileStats)
 	w.multiFileStats[l-1].Filenames = append(w.multiFileStats[l-1].Filenames,
 		[2]string{dataFile, statFile},
@@ -509,7 +513,71 @@ func (w *Writer) flushKVs(ctx context.Context, fromClose bool) (err error) {
 	w.kvBuffer.Reset()
 	w.rc.reset()
 	w.batchSize = 0
+	w.currentSeq++
 	return nil
+}
+
+func (w *Writer) flushSortedKVs(ctx context.Context) (string, string, error) {
+	logger := logutil.Logger(ctx).With(
+		zap.String("writer-id", w.writerID),
+		zap.Int("sequence-number", w.currentSeq),
+	)
+	writeStartTime := time.Now()
+	dataFile, statFile, dataWriter, statWriter, err := w.createStorageWriter(ctx)
+	if err != nil {
+		return "", "", err
+	}
+	defer func() {
+		// close the writers when meet error. If no error happens, writers will
+		// be closed outside and assigned to nil.
+		if dataWriter != nil {
+			_ = dataWriter.Close(ctx)
+		}
+		if statWriter != nil {
+			_ = statWriter.Close(ctx)
+		}
+	}()
+	kvStore, err := NewKeyValueStore(ctx, dataWriter, w.rc)
+	if err != nil {
+		return "", "", err
+	}
+
+	for _, pair := range w.kvLocations {
+		err = kvStore.addEncodedData(w.kvBuffer.GetSlice(pair))
+		if err != nil {
+			return "", "", err
+		}
+	}
+
+	kvStore.Close()
+	encodedStat := w.rc.encode()
+	statSize := len(encodedStat)
+	_, err = statWriter.Write(ctx, encodedStat)
+	if err != nil {
+		return "", "", err
+	}
+	err = dataWriter.Close(ctx)
+	dataWriter = nil
+	if err != nil {
+		return "", "", err
+	}
+	err = statWriter.Close(ctx)
+	statWriter = nil
+	if err != nil {
+		return "", "", err
+	}
+
+	writeDuration := time.Since(writeStartTime)
+	logger.Info("flush sorted kv",
+		zap.Uint64("bytes", w.batchSize),
+		zap.Int("stat-size", statSize),
+		zap.Duration("write-time", writeDuration),
+		zap.String("write-speed(bytes/s)", getSpeed(w.batchSize, writeDuration.Seconds(), true)),
+	)
+	metrics.GlobalSortWriteToCloudStorageDuration.WithLabelValues("write").Observe(writeDuration.Seconds())
+	metrics.GlobalSortWriteToCloudStorageRate.WithLabelValues("write").Observe(float64(w.batchSize) / 1024.0 / 1024.0 / writeDuration.Seconds())
+
+	return dataFile, statFile, nil
 }
 
 func (w *Writer) getKeyByLoc(loc membuf.SliceLocation) []byte {

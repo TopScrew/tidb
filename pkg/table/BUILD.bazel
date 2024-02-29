@@ -11,6 +11,7 @@ go_library(
     importpath = "github.com/pingcap/tidb/pkg/table",
     visibility = ["//visibility:public"],
     deps = [
+        "//pkg/errctx",
         "//pkg/errno",
         "//pkg/expression",
         "//pkg/kv",
@@ -23,6 +24,8 @@ go_library(
         "//pkg/parser/types",
         "//pkg/sessionctx",
         "//pkg/sessionctx/stmtctx",
+        "//pkg/sessionctx/variable",
+        "//pkg/table/context",
         "//pkg/types",
         "//pkg/util/chunk",
         "//pkg/util/dbterror",
@@ -51,6 +54,7 @@ go_test(
     race = "on",
     shard_count = 9,
     deps = [
+        "//pkg/errctx",
         "//pkg/errno",
         "//pkg/expression",
         "//pkg/parser/ast",
@@ -58,7 +62,6 @@ go_test(
         "//pkg/parser/model",
         "//pkg/parser/mysql",
         "//pkg/parser/terror",
-        "//pkg/sessionctx",
         "//pkg/sessionctx/stmtctx",
         "//pkg/testkit/testsetup",
         "//pkg/types",

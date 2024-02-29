@@ -17,7 +17,7 @@ package executor
 import (
 	"context"
 	"encoding/json"
-	"github.com/pingcap/tidb/pkg/planner/core"
+	"github.com/pingcap/tidb/pkg/util/dbterror/plannererrors"
 	"github.com/pingcap/tidb/pkg/util/sem"
 	"strings"
 
@@ -165,13 +165,13 @@ func (e *GrantExec) Next(ctx context.Context, _ *chunk.Chunk) error {
 		}
 
 		if (hitRestrictedPrefix || hitRestrictedList) && !hasRestrictedPrivAdmin {
-			return core.ErrSpecificAccessDenied.GenWithStackByArgs("RESTRICTED_PRIV_ADMIN")
+			return plannererrors.ErrSpecificAccessDenied.GenWithStackByArgs("RESTRICTED_PRIV_ADMIN")
 		}
 
 		if hitRestrictedList {
 			for _, user := range e.Users {
 				if !checker.RequestDynamicVerificationWithUser("RESTRICTED_PRIV_ADMIN", false, user.User) {
-					return core.ErrRecipientAccessDenied.GenWithStackByArgs("RESTRICTED_PRIV_ADMIN")
+					return plannererrors.ErrRecipientAccessDenied.GenWithStackByArgs("RESTRICTED_PRIV_ADMIN")
 				}
 			}
 		}
@@ -715,7 +715,7 @@ func composeColumnPrivUpdateForGrant(ctx sessionctx.Context, sql *strings.Builde
 }
 
 // recordExists is a helper function to check if the sql returns any row.
-func recordExists(sctx sessionctx.Context, sql string, args ...interface{}) (bool, error) {
+func recordExists(sctx sessionctx.Context, sql string, args ...any) (bool, error) {
 	ctx := kv.WithInternalSourceType(context.Background(), kv.InternalTxnPrivilege)
 	rs, err := sctx.(sqlexec.SQLExecutor).ExecuteInternal(ctx, sql, args...)
 	if err != nil {

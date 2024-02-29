@@ -215,7 +215,7 @@ func (d TiKVDriver) OpenWithOptions(path string, options ...Option) (resStore kv
 	)
 
 	s, err = tikv.NewKVStore(uuid, pdClient, spkv, &injectTraceClient{Client: rpcClient},
-		tikv.WithPDHTTPClient(etcdAddrs, pdhttp.WithTLSConfig(tlsConfig), pdhttp.WithMetrics(metrics.PDAPIRequestCounter, metrics.PDAPIExecutionHistogram)))
+		tikv.WithPDHTTPClient("tikv-driver", etcdAddrs, pdhttp.WithTLSConfig(tlsConfig), pdhttp.WithMetrics(metrics.PDAPIRequestCounter, metrics.PDAPIExecutionHistogram)))
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
@@ -380,7 +380,7 @@ func (s *tikvStore) CurrentVersion(txnScope string) (kv.Version, error) {
 }
 
 // ShowStatus returns the specified status of the storage
-func (s *tikvStore) ShowStatus(ctx context.Context, key string) (interface{}, error) {
+func (s *tikvStore) ShowStatus(ctx context.Context, key string) (any, error) {
 	return nil, kv.ErrNotImplemented
 }
 
