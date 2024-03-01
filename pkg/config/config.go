@@ -637,14 +637,6 @@ type RestrictedTable struct {
 	Name   string `toml:"name" json:"name"`
 }
 
-// RestrictedColumn is a column restricted under Security Enhanced Mode.
-// The current restriction only applies to information_schema.
-type RestrictedColumn struct {
-	Name            string `toml:"name" json:"name"`
-	RestrictionType string `toml:"restriction-type" json:"restriction-type"`
-	Value           string `toml:"value" json:"value"`
-}
-
 // RestrictedVariable refers to the limitation of system variables in Security Enhanced Mode.
 type RestrictedVariable struct {
 	Name            string `toml:"name" json:"name"`
