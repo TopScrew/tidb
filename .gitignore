@@ -40,8 +40,3 @@ bazel-tidb
 *.log.json
 genkeyword
 test_coverage
-<<<<<<< HEAD
-cmd/tidb-server/main.go
-=======
-coverage.dat
->>>>>>> master
