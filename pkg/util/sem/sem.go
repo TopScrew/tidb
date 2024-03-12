@@ -92,8 +92,10 @@ func Enable() {
 	cfg := config.GetGlobalConfig()
 	for _, resVar := range cfg.Security.SEM.RestrictedVariables {
 		if resVar.RestrictionType == "replace" && sysMap[resVar.Name] == "" {
-			sysMap[resVar.Name] = variable.GetSysVar(resVar.Name).Value
-			variable.SetSysVar(resVar.Name, resVar.Value)
+			if variable.IsVarExists(resVar.Name) {
+				sysMap[resVar.Name] = variable.GetSysVar(resVar.Name).Value
+				variable.SetSysVar(resVar.Name, resVar.Value)
+			}
 		}
 	}
 	// write to log so users understand why some operations are weird.
