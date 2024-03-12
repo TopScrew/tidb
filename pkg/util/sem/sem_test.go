@@ -16,10 +16,10 @@ package sem
 
 import (
 	"github.com/pingcap/tidb/pkg/config"
+	"github.com/pingcap/tidb/pkg/sessionctx/variable"
 	"testing"
 
 	"github.com/pingcap/tidb/pkg/parser/mysql"
-	"github.com/pingcap/tidb/pkg/sessionctx/variable"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -113,12 +113,12 @@ func TestIsStaticPermissionRestricted(t *testing.T) {
 
 	tidbCfg := config.NewConfig()
 	p := make(map[mysql.PrivilegeType]struct{})
-	p[mysql.FilePriv] = struct{}{}
+	p[mysql.ConfigPriv] = struct{}{}
 	p[mysql.ShutdownPriv] = struct{}{}
 	tidbCfg.Security.SEM.RestrictedStaticPrivileges = p
 	config.StoreGlobalConfig(tidbCfg)
 	assert := assert.New(t)
-	assert.True(IsStaticPermissionRestricted(mysql.FilePriv))
+	assert.True(IsStaticPermissionRestricted(mysql.ConfigPriv))
 	assert.False(IsStaticPermissionRestricted(mysql.AlterPriv))
 	assert.True(IsStaticPermissionRestricted(mysql.ShutdownPriv))
 	assert.False(IsStaticPermissionRestricted(mysql.CreatePriv))
