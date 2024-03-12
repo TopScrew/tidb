@@ -17,6 +17,7 @@ package sem
 import (
 	"github.com/pingcap/tidb/pkg/config"
 	"github.com/pingcap/tidb/pkg/parser/mysql"
+	"strings"
 	"sync"
 	"sync/atomic"
 
@@ -85,8 +86,6 @@ func GetOrigVar(name string) string {
 func Enable() {
 	atomic.StoreInt32(&semEnabled, 1)
 	variable.SetSysVar(variable.TiDBEnableEnhancedSecurity, variable.On)
-	//variable.SetSysVar(variable.Hostname, variable.DefHostname)
-
 	sysMap = make(map[string]string)
 
 	cfg := config.GetGlobalConfig()
@@ -111,9 +110,6 @@ func Disable() {
 		variable.SetSysVar(resVar, sysMap[resVar])
 	}
 	sysMap = nil
-	//if hostname, err := os.Hostname(); err == nil {
-	//	variable.SetSysVar(variable.Hostname, hostname)
-	//}
 	logutil.BgLogger().Info("tidb-server is operating with security enhanced mode (SEM) disabled")
 }
 
@@ -127,13 +123,11 @@ func IsEnabled() bool {
 func IsInvisibleSchema(dbName string) bool {
 	cfg := config.GetGlobalConfig()
 	for _, dbn := range cfg.Security.SEM.RestrictedDatabases {
-		if dbName == dbn {
-			logutil.BgLogger().Warn("SEM Warning: " + dbn + " is invisible")
+		if strings.ToLower(dbName) == strings.ToLower(dbn) {
 			return true
 		}
 	}
 	return false
-	//return strings.EqualFold(dbName, metricsSchema)
 }
 
 // IsInvisibleTable returns true if the table needs to be hidden
@@ -145,8 +139,7 @@ func IsInvisibleTable(dbLowerName, tblLowerName string) bool {
 	}
 
 	for _, tbl := range cfg.Security.SEM.RestrictedTables {
-		if dbLowerName == tbl.Schema && tblLowerName == tbl.Name {
-			logutil.BgLogger().Warn("SEM Warning: " + tbl.Schema + "." + tbl.Name + " is invisible")
+		if strings.ToLower(dbLowerName) == strings.ToLower(tbl.Schema) && strings.ToLower(tblLowerName) == strings.ToLower(tbl.Name) {
 			return true
 		}
 	}
@@ -170,9 +163,8 @@ func GetRestrictedStatusOfStateVariable(varName string) (bool, *config.Restricte
 func IsInvisibleSysVar(varNameInLower string) bool {
 	cfg := config.GetGlobalConfig()
 	for _, resvarName := range cfg.Security.SEM.RestrictedVariables {
-		if varNameInLower == resvarName.Name {
+		if strings.ToLower(varNameInLower) == strings.ToLower(resvarName.Name) {
 			if resvarName.RestrictionType == "hidden" {
-				logutil.BgLogger().Warn("SEM Warning: " + resvarName.Name + " is invisible")
 				return true
 			}
 		}
@@ -186,7 +178,7 @@ func IsInvisibleGlobalSysVar(varNameInLower string) bool {
 	}
 	cfg := config.GetGlobalConfig()
 	for _, resvarName := range cfg.Security.SEM.RestrictedVariables {
-		if varNameInLower == resvarName.Name && resvarName.Scope == "global" {
+		if strings.ToLower(varNameInLower) == strings.ToLower(resvarName.Name) && strings.ToLower(resvarName.Scope) == "global" {
 			return true
 		}
 	}
