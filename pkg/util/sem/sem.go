@@ -67,11 +67,12 @@ const (
 
 var (
 	semEnabled int32
-)
 
-// sysMap record original value of sysvar
-var sysMap map[string]string
-var sysMapMutex sync.RWMutex
+	// sysMap record original value of sysvar
+	sysMap      map[string]string
+	mapMutex    sync.Mutex
+	sysMapMutex sync.RWMutex
+)
 
 // GetOrigVar Get original system variables
 func GetOrigVar(name string) string {
@@ -84,30 +85,45 @@ func GetOrigVar(name string) string {
 // Dynamic configuration by users may be a security risk.
 
 func Enable() {
-	atomic.StoreInt32(&semEnabled, 1)
-	variable.SetSysVar(variable.TiDBEnableEnhancedSecurity, variable.On)
+	if !atomic.CompareAndSwapInt32(&semEnabled, 0, 1) {
+		logutil.BgLogger().Info("SEM enable operation was skipped because it is already enabled")
+		return
+	}
+
+	mapMutex.Lock()
+	defer mapMutex.Unlock()
 	sysMap = make(map[string]string)
+
+	variable.SetSysVar(variable.TiDBEnableEnhancedSecurity, variable.On)
 
 	cfg := config.GetGlobalConfig()
 	for _, resVar := range cfg.Security.SEM.RestrictedVariables {
-		if resVar.RestrictionType == "replace" && sysMap[resVar.Name] == "" {
+		if resVar.RestrictionType == "replace" {
 			if variable.IsVarExists(resVar.Name) {
-				sysMap[resVar.Name] = variable.GetSysVar(resVar.Name).Value
-				variable.SetSysVar(resVar.Name, resVar.Value)
+				originalValue := variable.GetSysVar(resVar.Name).Value
+				if _, ok := sysMap[resVar.Name]; !ok {
+					sysMap[resVar.Name] = originalValue
+					variable.SetSysVar(resVar.Name, resVar.Value)
+				}
 			}
 		}
 	}
-	// write to log so users understand why some operations are weird.
+
 	logutil.BgLogger().Info("tidb-server is operating with security enhanced mode (SEM) enabled")
 }
 
 // Disable disables SEM. This is intended to be used by the test-suite.
 // Dynamic configuration by users may be a security risk.
 func Disable() {
-	atomic.StoreInt32(&semEnabled, 0)
+	if !atomic.CompareAndSwapInt32(&semEnabled, 1, 0) {
+		logutil.BgLogger().Info("SEM disable operation was skipped because it is already disabled")
+		return
+	}
+	mapMutex.Lock()
+	defer mapMutex.Unlock()
 	variable.SetSysVar(variable.TiDBEnableEnhancedSecurity, variable.Off)
-	for _, resVar := range sysMap {
-		variable.SetSysVar(resVar, sysMap[resVar])
+	for varName, varValue := range sysMap {
+		variable.SetSysVar(varName, varValue)
 	}
 	sysMap = nil
 	logutil.BgLogger().Info("tidb-server is operating with security enhanced mode (SEM) disabled")
