@@ -1169,9 +1169,19 @@ func TestSecurityEnhancedModeRestrictedTables(t *testing.T) {
 	sem.Enable()
 	defer sem.Disable()
 
-	//tidbCfg := config.NewConfig()
-	//tidbCfg.Security.SEM.RestrictedDatabases = []string{"metricsSchema", "mysql"}
-	//config.StoreGlobalConfig(tidbCfg)
+	tidbCfg := config.NewConfig()
+	tidbCfg.Security.SEM.RestrictedDatabases = []string{"metrics_schema"}
+	tidbCfg.Security.SEM.RestrictedTables = []config.RestrictedTable{
+		{
+			Schema: "metrics_schema",
+			Name:   "uptime",
+		},
+		{
+			Schema: "mysql",
+			Name:   "abcd",
+		},
+	}
+	config.StoreGlobalConfig(tidbCfg)
 
 	err := urootTk.ExecToErr("use metrics_schema")
 	require.EqualError(t, err, "[executor:1044]Access denied for user 'uroot'@'%' to database 'metrics_schema'")
