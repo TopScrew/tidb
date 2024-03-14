@@ -256,7 +256,10 @@ func TestSetVariablePrivilege(t *testing.T) {
 	require.EqualError(t, tk2.ExecToErr("set @@global.var1=27"), "[planner:1227]Access denied; you need (at least one of) the restricted_priv3 privilege(s) for this operation")
 	tk2.MustQuery("select @@global.var1").Check(testkit.Rows("18"))
 
+	// The authorization of restricted_* has added an additional RESTRICTED_PRIV_ADMIN constraint, requiring authorization while SEM is turned off.
+	sem.Disable()
 	tk.MustExec("GRANT restricted_priv3 on *.* TO u2@localhost")
+	sem.Enable()
 	tk2.MustExec("set @@global.var1=28")
 	tk2.MustQuery("select @@global.var1").Check(testkit.Rows("28"))
 }
