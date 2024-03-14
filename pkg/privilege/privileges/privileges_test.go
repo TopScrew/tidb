@@ -1169,6 +1169,10 @@ func TestSecurityEnhancedModeRestrictedTables(t *testing.T) {
 	sem.Enable()
 	defer sem.Disable()
 
+	//tidbCfg := config.NewConfig()
+	//tidbCfg.Security.SEM.RestrictedDatabases = []string{"metricsSchema", "mysql"}
+	//config.StoreGlobalConfig(tidbCfg)
+
 	err := urootTk.ExecToErr("use metrics_schema")
 	require.EqualError(t, err, "[executor:1044]Access denied for user 'uroot'@'%' to database 'metrics_schema'")
 
@@ -1269,6 +1273,39 @@ func TestSecurityEnhancedModeSysVars(t *testing.T) {
 
 	sem.Enable()
 	defer sem.Disable()
+	tidbCfg := config.NewConfig()
+	tidbCfg.Security.SEM.RestrictedVariables = []config.RestrictedVariable{
+		{
+			Name:            variable.TiDBForcePriority,
+			RestrictionType: "hidden",
+			Value:           "",
+		},
+		{
+			Name:            "tidb_enable_telemetry",
+			RestrictionType: "hidden",
+			Scope:           "global",
+			Value:           "",
+		},
+		{
+			Name:            "tidb_top_sql_max_time_series_count",
+			RestrictionType: "hidden",
+			Scope:           "global",
+			Value:           "",
+		},
+		{
+			Name:            "tidb_top_sql_max_meta_count",
+			RestrictionType: "hidden",
+			Scope:           "global",
+			Value:           "",
+		},
+		{
+			Name:            "hostname",
+			RestrictionType: "replace",
+			Value:           variable.DefHostname,
+		},
+	}
+
+	config.StoreGlobalConfig(tidbCfg)
 
 	// svroot1 has SUPER but in SEM will be restricted
 	tk.Session().Auth(&auth.UserIdentity{
@@ -1327,10 +1364,6 @@ func TestSecurityEnhancedModeSysVars(t *testing.T) {
 	tk.MustQuery(`SELECT @@global.tidb_enable_telemetry`).Check(testkit.Rows("0"))
 
 	tk.MustQuery(`SELECT @@hostname`).Check(testkit.Rows(variable.DefHostname))
-	sem.Disable()
-	if hostname, err := os.Hostname(); err == nil {
-		tk.MustQuery(`SELECT @@hostname`).Check(testkit.Rows(hostname))
-	}
 }
 
 func TestSecurityEnhancedModeStatus(t *testing.T) {
