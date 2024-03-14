@@ -201,6 +201,29 @@ func IsInvisibleGlobalSysVar(varNameInLower string) bool {
 	return false
 }
 
+func IsReadOnlySysVar(varNameInLower string) bool {
+	cfg := config.GetGlobalConfig()
+	for _, resvarName := range cfg.Security.SEM.RestrictedVariables {
+		if strings.ToLower(varNameInLower) == strings.ToLower(resvarName.Name) {
+			return resvarName.Readonly == true
+		}
+	}
+	return false
+}
+
+func IsReadOnlyGlobalSysVar(varNameInLower string) bool {
+	if !IsReadOnlySysVar(varNameInLower) {
+		return false
+	}
+	cfg := config.GetGlobalConfig()
+	for _, resvarName := range cfg.Security.SEM.RestrictedVariables {
+		if strings.ToLower(varNameInLower) == strings.ToLower(resvarName.Name) && strings.ToLower(resvarName.Scope) == "global" {
+			return resvarName.Readonly == true
+		}
+	}
+	return false
+}
+
 // IsReplacedSysVar returns true if the sys var need to be replaced
 func IsReplacedSysVar(varNameInLower string) bool {
 	cfg := config.GetGlobalConfig()
