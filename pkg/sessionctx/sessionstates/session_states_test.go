@@ -241,6 +241,21 @@ func TestSystemVars(t *testing.T) {
 }
 
 func TestInvisibleVars(t *testing.T) {
+	tidbCfg := config.NewConfig()
+	tidbCfg.Security.SEM.RestrictedVariables = []config.RestrictedVariable{
+		{
+			Name:            variable.TiDBOptWriteRowID,
+			RestrictionType: "hidden",
+			Readonly:        true,
+		},
+		{
+			Name:            variable.TiDBRowFormatVersion,
+			RestrictionType: "hidden",
+			Readonly:        true,
+		},
+	}
+	config.StoreGlobalConfig(tidbCfg)
+
 	tests := []struct {
 		hasPriv       bool
 		stmt          string
@@ -300,6 +315,7 @@ func TestInvisibleVars(t *testing.T) {
 	tk := testkit.NewTestKit(t, store)
 	tk.MustExec("CREATE USER u1, u2")
 	tk.MustExec("GRANT RESTRICTED_VARIABLES_ADMIN ON *.* to u1")
+
 	if !sem.IsEnabled() {
 		sem.Enable()
 		defer sem.Disable()
