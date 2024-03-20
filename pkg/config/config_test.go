@@ -1150,7 +1150,7 @@ func TestSEMConfig(t *testing.T) {
 		": [\n        {\n            \"name\": \"tidb_gc_leader_desc\",\n            \"restriction-type\":" +
 		" \"hidden\",\n            \"value\": \"\"\n        },\n       {\n         \"name\": \"tidb_gc_leader_uuid\",\n    " +
 		"     \"restriction-type\": \"replace\",\n         \"value\": \"xxxxxxxxxxx\"\n       }\n    ]," +
-		"\n    \"restricted_static_privileges_col\" : [\"File_priv\"]\n}")
+		"\n    \"restricted_static_privileges_col\" : [\"Config_priv\"]\n}")
 
 	require.NoError(t, err)
 	require.NoError(t, f.Sync())

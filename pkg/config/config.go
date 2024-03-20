@@ -1579,10 +1579,12 @@ func loadSEMConfig(semConfigPath string) (*SEM, error) {
 
 // Validate the legality of Security Enhanced Mode configuration content.
 func isValidSEMConfig(semConfig SEM) error {
-
+	restrictedPermissionSet := map[string]struct{}{
+		"Shutdown_priv": {},
+		"Config_priv":   {},
+	}
 	for _, privName := range semConfig.RestrictedStaticPrivilegesCol {
-		privType := mysql.Col2PrivType
-		if _, ok := privType[privName]; !ok {
+		if _, ok := restrictedPermissionSet[privName]; !ok {
 			return fmt.Errorf("unrecognized permission %s", privName)
 		}
 	}

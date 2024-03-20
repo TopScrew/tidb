@@ -84,30 +84,15 @@ func (e *RevokeExec) Next(ctx context.Context, _ *chunk.Chunk) error {
 	}
 
 	// Adding additional permissions restrictions for SEM.
-	// Permissions prefixed with RESTRICTED_ require additional RESTRICTED_PRIV_ADMIN permission during revocation.
 	// Permissions listed in the SEM configuration requiring revocation demand additional RESTRICTED_PRIV_ADMIN permission.
 	if sem.IsEnabled() {
-
 		currentUser := e.Ctx().GetSessionVars().User
 		checker := privilege.GetPrivilegeManager(e.Ctx())
 		hasRestrictedPrivAdmin := checker.RequestDynamicVerificationWithUser("RESTRICTED_PRIV_ADMIN", false, currentUser)
-		hitRestrictedPrefix := false
-		hitRestrictedList := false
-
 		for _, priv := range e.Privs {
-			privName := strings.ToUpper(priv.Name)
-			if sem.HasRestrictedPrivilegePrefix(privName) {
-				hitRestrictedPrefix = true
-				break
+			if priv.Priv != mysql.ExtendedPriv && sem.IsStaticPermissionRestricted(priv.Priv) && !hasRestrictedPrivAdmin {
+				return plannererrors.ErrSpecificAccessDenied.GenWithStackByArgs("RESTRICTED_PRIV_ADMIN")
 			}
-			if priv.Priv != mysql.ExtendedPriv && sem.IsStaticPermissionRestricted(priv.Priv) {
-				hitRestrictedList = true
-				break
-			}
-		}
-
-		if (hitRestrictedPrefix || hitRestrictedList) && !hasRestrictedPrivAdmin {
-			return plannererrors.ErrSpecificAccessDenied.GenWithStackByArgs("RESTRICTED_PRIV_ADMIN")
 		}
 	}
 

@@ -297,13 +297,13 @@ func TestInvisibleVars(t *testing.T) {
 
 	sessionstates.SetupSigningCertForTest(t)
 	store := testkit.CreateMockStore(t)
-	tk := testkit.NewTestKit(t, store)
-	tk.MustExec("CREATE USER u1, u2")
-	tk.MustExec("GRANT RESTRICTED_VARIABLES_ADMIN ON *.* to u1")
 	if !sem.IsEnabled() {
 		sem.Enable()
 		defer sem.Disable()
 	}
+	tk := testkit.NewTestKit(t, store)
+	tk.MustExec("CREATE USER u1, u2")
+	tk.MustExec("GRANT RESTRICTED_VARIABLES_ADMIN ON *.* to u1")
 
 	for _, tt := range tests {
 		tk1 := testkit.NewTestKit(t, store)

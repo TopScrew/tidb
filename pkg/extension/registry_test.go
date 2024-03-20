@@ -257,9 +257,7 @@ func TestSetVariablePrivilege(t *testing.T) {
 	tk2.MustQuery("select @@global.var1").Check(testkit.Rows("18"))
 
 	// The authorization of restricted_* has added an additional RESTRICTED_PRIV_ADMIN constraint, requiring authorization while SEM is turned off.
-	sem.Disable()
 	tk.MustExec("GRANT restricted_priv3 on *.* TO u2@localhost")
-	sem.Enable()
 	tk2.MustExec("set @@global.var1=28")
 	tk2.MustQuery("select @@global.var1").Check(testkit.Rows("28"))
 }
@@ -344,9 +342,7 @@ func TestCustomAccessCheck(t *testing.T) {
 	tk2.MustQuery("select * from t1 where id=1").Check(testkit.Rows("1 12"))
 
 	// The authorization of restricted_* has added an additional RESTRICTED_PRIV_ADMIN constraint, requiring authorization while SEM is turned off.
-	sem.Disable()
 	tk.MustExec("GRANT restricted_priv3 on *.* TO u2@localhost")
-	sem.Enable()
 	tk2.MustExec("update t1 set v=31 where id=1")
 	tk2.MustQuery("select * from t1 where id=1").Check(testkit.Rows("1 31"))
 

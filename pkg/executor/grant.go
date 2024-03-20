@@ -142,36 +142,23 @@ func (e *GrantExec) Next(ctx context.Context, _ *chunk.Chunk) error {
 	}
 
 	// Adding additional permissions restrictions for SEM.
-	// Permissions prefixed with RESTRICTED_ require both the granting and the recipient to have additional RESTRICTED_PRIV_ADMIN permission during granting.
 	// Permissions listed in the SEM configuration requiring restriction demand both the granting and the recipient to have additional RESTRICTED_PRIV_ADMIN permission.
 	if sem.IsEnabled() {
-
 		currentUser := e.Ctx().GetSessionVars().User
 		checker := privilege.GetPrivilegeManager(e.Ctx())
 		hasRestrictedPrivAdmin := checker.RequestDynamicVerificationWithUser("RESTRICTED_PRIV_ADMIN", false, currentUser)
-		hitRestrictedPrefix := false
-		hitRestrictedList := false
 
 		for _, priv := range e.Privs {
-			privName := strings.ToUpper(priv.Name)
-			if sem.HasRestrictedPrivilegePrefix(privName) {
-				hitRestrictedPrefix = true
-				continue
-			}
 
 			if priv.Priv != mysql.ExtendedPriv && sem.IsStaticPermissionRestricted(priv.Priv) {
-				hitRestrictedList = true
-			}
-		}
+				if !hasRestrictedPrivAdmin {
+					return plannererrors.ErrSpecificAccessDenied.GenWithStackByArgs("RESTRICTED_PRIV_ADMIN")
+				}
 
-		if (hitRestrictedPrefix || hitRestrictedList) && !hasRestrictedPrivAdmin {
-			return plannererrors.ErrSpecificAccessDenied.GenWithStackByArgs("RESTRICTED_PRIV_ADMIN")
-		}
-
-		if hitRestrictedList {
-			for _, user := range e.Users {
-				if !checker.RequestDynamicVerificationWithUser("RESTRICTED_PRIV_ADMIN", false, user.User) {
-					return plannererrors.ErrRecipientAccessDenied.GenWithStackByArgs("RESTRICTED_PRIV_ADMIN")
+				for _, user := range e.Users {
+					if !checker.RequestDynamicVerificationWithUser("RESTRICTED_PRIV_ADMIN", false, user.User) {
+						return plannererrors.ErrRecipientAccessDenied.GenWithStackByArgs("RESTRICTED_PRIV_ADMIN")
+					}
 				}
 			}
 		}

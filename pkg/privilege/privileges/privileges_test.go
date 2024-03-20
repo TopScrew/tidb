@@ -1482,10 +1482,10 @@ func TestSecurityEnhancedModePrivilege(t *testing.T) {
 	require.EqualError(t, err, "[planner:1227]Access denied; you need (at least one of) the RESTRICTED_PRIV_ADMIN privilege(s) for this operation")
 
 	err = tk.ExecToErr("GRANT RESTRICTED_VARIABLES_ADMIN ON *.* TO user5")
-	require.EqualError(t, err, "[planner:1227]Access denied; you need (at least one of) the RESTRICTED_PRIV_ADMIN privilege(s) for this operation")
+	require.NoError(t, err)
 
 	err = tk.ExecToErr("REVOKE RESTRICTED_VARIABLES_ADMIN ON *.* FROM user4")
-	require.EqualError(t, err, "[planner:1227]Access denied; you need (at least one of) the RESTRICTED_PRIV_ADMIN privilege(s) for this operation")
+	require.NoError(t, err)
 
 	tk.Session().Auth(&auth.UserIdentity{
 		Username:     "svroot2",
