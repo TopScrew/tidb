@@ -17,6 +17,8 @@ package sem
 import (
 	"github.com/pingcap/tidb/pkg/config"
 	"github.com/pingcap/tidb/pkg/parser/mysql"
+	"github.com/pingcap/tidb/pkg/privilege"
+	"github.com/pingcap/tidb/pkg/sessionctx"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -73,6 +75,33 @@ var (
 	mapMutex    sync.Mutex
 	sysMapMutex sync.RWMutex
 )
+
+var isResVarAdmin int32 = 0
+
+// CheckResVarAdmin checks if the user has the RESTRICTED_VARIABLES_ADMIN privilege
+func CheckResVarAdmin(sctx sessionctx.Context) {
+	if sctx == nil {
+		return
+	}
+	checker := privilege.GetPrivilegeManager(sctx)
+	sessionVars := sctx.GetSessionVars()
+	if sessionVars == nil || checker == nil {
+		return
+	}
+	resVarAdmin := checker.RequestDynamicVerification(sessionVars.ActiveRoles, "RESTRICTED_VARIABLES_ADMIN", false)
+	var val int32
+	if resVarAdmin {
+		val = 1
+	} else {
+		val = 0
+	}
+	atomic.StoreInt32(&isResVarAdmin, val)
+}
+
+// IsResVarAdmin returns true if the user has the RESTRICTED_VARIABLES_ADMIN privilege
+func IsResVarAdmin() bool {
+	return atomic.LoadInt32(&isResVarAdmin) == 1
+}
 
 // GetOrigVar Get original system variables
 func GetOrigVar(name string) string {
@@ -196,6 +225,29 @@ func IsInvisibleGlobalSysVar(varNameInLower string) bool {
 	for _, resvarName := range cfg.Security.SEM.RestrictedVariables {
 		if strings.ToLower(varNameInLower) == strings.ToLower(resvarName.Name) && strings.ToLower(resvarName.Scope) == "global" {
 			return true
+		}
+	}
+	return false
+}
+
+func IsReadOnlySysVar(varNameInLower string) bool {
+	cfg := config.GetGlobalConfig()
+	for _, resvarName := range cfg.Security.SEM.RestrictedVariables {
+		if strings.ToLower(varNameInLower) == strings.ToLower(resvarName.Name) {
+			return resvarName.Readonly == true
+		}
+	}
+	return false
+}
+
+func IsReadOnlyGlobalSysVar(varNameInLower string) bool {
+	if !IsReadOnlySysVar(varNameInLower) {
+		return false
+	}
+	cfg := config.GetGlobalConfig()
+	for _, resvarName := range cfg.Security.SEM.RestrictedVariables {
+		if strings.ToLower(varNameInLower) == strings.ToLower(resvarName.Name) && strings.ToLower(resvarName.Scope) == "global" {
+			return resvarName.Readonly == true
 		}
 	}
 	return false
