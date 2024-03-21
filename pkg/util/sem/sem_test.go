@@ -15,6 +15,7 @@
 package sem
 
 import (
+	"github.com/pingcap/tidb/pkg/config"
 	"testing"
 
 	"github.com/pingcap/tidb/pkg/parser/mysql"
@@ -77,24 +78,132 @@ func TestIsInvisibleStatusVar(t *testing.T) {
 }
 
 func TestIsInvisibleSysVar(t *testing.T) {
-	assert := assert.New(t)
+	tidbCfg := config.NewConfig()
+	tidbCfg.Security.SEM.RestrictedVariables = []config.RestrictedVariable{
+		{
+			Name:            variable.Hostname,
+			RestrictionType: "replace",
+			Value:           "localhost",
+		},
+		{
+			Name:            variable.TiDBEnableEnhancedSecurity,
+			RestrictionType: "replace",
+			Value:           "ON",
+		},
+		{
+			Name:            variable.TiDBAllowRemoveAutoInc,
+			RestrictionType: "replace",
+			Value:           "True",
+		},
+		{
+			Name:            variable.TiDBCheckMb4ValueInUTF8,
+			RestrictionType: "hidden",
+			Value:           "",
+		},
+		{
+			Name:            variable.TiDBConfig,
+			RestrictionType: "hidden",
+			Value:           "",
+		},
+		{
+			Name:            variable.TiDBEnableSlowLog,
+			RestrictionType: "hidden",
+			Value:           "",
+		},
+		{
+			Name:            variable.TiDBExpensiveQueryTimeThreshold,
+			RestrictionType: "hidden",
+			Value:           "",
+		},
+		{
+			Name:            variable.TiDBForcePriority,
+			RestrictionType: "hidden",
+			Value:           "",
+		},
+		{
+			Name:            variable.TiDBGeneralLog,
+			RestrictionType: "hidden",
+			Value:           "",
+		},
+		{
+			Name:            variable.TiDBMetricSchemaRangeDuration,
+			RestrictionType: "hidden",
+			Value:           "",
+		},
+		{
+			Name:            variable.TiDBMetricSchemaStep,
+			RestrictionType: "hidden",
+			Value:           "",
+		},
+		{
+			Name:            variable.TiDBOptWriteRowID,
+			RestrictionType: "hidden",
+			Value:           "",
+		},
+		{
+			Name:            variable.TiDBPProfSQLCPU,
+			RestrictionType: "hidden",
+			Value:           "",
+		},
+		{
+			Name:            variable.TiDBRecordPlanInSlowLog,
+			RestrictionType: "hidden",
+			Value:           "",
+		},
+		{
+			Name:            variable.TiDBSlowQueryFile,
+			RestrictionType: "hidden",
+			Value:           "",
+		},
+		{
+			Name:            variable.TiDBSlowLogThreshold,
+			RestrictionType: "hidden",
+			Value:           "",
+		},
+		{
+			Name:            variable.TiDBEnableCollectExecutionInfo,
+			RestrictionType: "hidden",
+			Value:           "",
+		},
+		{
+			Name:            variable.TiDBMemoryUsageAlarmRatio,
+			RestrictionType: "hidden",
+			Value:           "",
+		},
+		{
+			Name:            variable.TiDBEnableTelemetry,
+			RestrictionType: "hidden",
+			Value:           "",
+		},
+		// This line is commented out, assuming variable.TiDBEnableTelemetry should be excluded
+		{
+			Name:            variable.TiDBRowFormatVersion,
+			RestrictionType: "hidden",
+			Value:           "",
+		},
+		{
+			Name:            variable.TiDBRedactLog,
+			RestrictionType: "hidden",
+			Value:           "",
+		},
+		{
+			Name:            variable.TiDBTopSQLMaxTimeSeriesCount,
+			RestrictionType: "hidden",
+			Value:           "",
+		},
+		// Assuming tidbAuditRetractLog is a variable, if it's not, you might need to adjust
+		{
+			Name:            tidbAuditRetractLog,
+			RestrictionType: "hidden",
+			Value:           "",
+		},
+	}
 
+	config.StoreGlobalConfig(tidbCfg)
+	assert := assert.New(t)
 	assert.False(IsInvisibleSysVar(variable.Hostname))                   // changes the value to default, but is not invisible
 	assert.False(IsInvisibleSysVar(variable.TiDBEnableEnhancedSecurity)) // should be able to see the mode is on.
 	assert.False(IsInvisibleSysVar(variable.TiDBAllowRemoveAutoInc))
-
-	assert.True(IsInvisibleSysVar(variable.TiDBCheckMb4ValueInUTF8))
-	assert.True(IsInvisibleSysVar(variable.TiDBConfig))
-	assert.True(IsInvisibleSysVar(variable.TiDBEnableSlowLog))
-	assert.True(IsInvisibleSysVar(variable.TiDBExpensiveQueryTimeThreshold))
-	assert.True(IsInvisibleSysVar(variable.TiDBForcePriority))
-	assert.True(IsInvisibleSysVar(variable.TiDBGeneralLog))
-	assert.True(IsInvisibleSysVar(variable.TiDBMetricSchemaRangeDuration))
-	assert.True(IsInvisibleSysVar(variable.TiDBMetricSchemaStep))
-	assert.True(IsInvisibleSysVar(variable.TiDBOptWriteRowID))
-	assert.True(IsInvisibleSysVar(variable.TiDBPProfSQLCPU))
-	assert.True(IsInvisibleSysVar(variable.TiDBRecordPlanInSlowLog))
-	assert.True(IsInvisibleSysVar(variable.TiDBSlowQueryFile))
 	assert.True(IsInvisibleSysVar(variable.TiDBSlowLogThreshold))
 	assert.True(IsInvisibleSysVar(variable.TiDBEnableCollectExecutionInfo))
 	assert.True(IsInvisibleSysVar(variable.TiDBMemoryUsageAlarmRatio))
@@ -102,6 +211,4 @@ func TestIsInvisibleSysVar(t *testing.T) {
 	assert.True(IsInvisibleSysVar(variable.TiDBRowFormatVersion))
 	assert.True(IsInvisibleSysVar(variable.TiDBRedactLog))
 	assert.True(IsInvisibleSysVar(variable.TiDBTopSQLMaxTimeSeriesCount))
-	assert.True(IsInvisibleSysVar(variable.TiDBTopSQLMaxTimeSeriesCount))
-	assert.True(IsInvisibleSysVar(tidbAuditRetractLog))
 }

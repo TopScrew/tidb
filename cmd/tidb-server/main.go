@@ -139,10 +139,11 @@ const (
 )
 
 var (
-	version      *bool
-	configPath   *string
-	configCheck  *bool
-	configStrict *bool
+	version       *bool
+	configPath    *string
+	semConfigPath *string
+	configCheck   *bool
+	configStrict  *bool
 
 	// Base
 	store            *string

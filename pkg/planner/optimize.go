@@ -16,6 +16,7 @@ package planner
 
 import (
 	"context"
+	"github.com/pingcap/tidb/pkg/util/sem"
 	"math"
 	"math/rand"
 	"sync"
@@ -164,6 +165,9 @@ func Optimize(ctx context.Context, sctx sessionctx.Context, node ast.Node, is in
 	}
 
 	tableHints := hint.ExtractTableHintsFromStmtNode(node, sessVars.StmtCtx)
+	sem.CheckResVarAdmin(sctx)
+	// Check if the user has the RESTRICTED_VARIABLES_ADMIN privilege.
+
 	originStmtHints, _, warns := hint.ParseStmtHints(tableHints, setVarHintChecker, byte(kv.ReplicaReadFollower))
 	sessVars.StmtCtx.StmtHints = originStmtHints
 	for _, warn := range warns {
@@ -401,7 +405,7 @@ func allowInReadOnlyMode(sctx pctx.PlanContext, node ast.Node) (bool, error) {
 	switch node.(type) {
 	// allow change variables (otherwise can't unset read-only mode)
 	case *ast.SetStmt,
-		// allow analyze table
+	// allow analyze table
 		*ast.AnalyzeTableStmt,
 		*ast.UseStmt,
 		*ast.ShowStmt,
@@ -580,6 +584,11 @@ func setVarHintChecker(varName, hint string) (ok bool, warning error) {
 	}
 	if !sysVar.IsHintUpdatableVerified {
 		warning = plannererrors.ErrNotHintUpdatable.FastGenByArgs(varName)
+	}
+
+	if sem.IsEnabled() && sem.IsReadOnlySysVar(varName) && !sem.IsResVarAdmin() {
+		warning = plannererrors.ErrSQLInReadOnlyMode.FastGenByArgs(varName)
+		return false, warning
 	}
 	return true, warning
 }
